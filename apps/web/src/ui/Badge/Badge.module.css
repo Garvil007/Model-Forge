@@ -1,0 +1,22 @@
+.badge {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-pill);
+  white-space: nowrap;
+}
+
+.lossless {
+  color: var(--lossless);
+  background: var(--b-ok);
+}
+
+.near-lossless {
+  color: var(--near);
+  background: var(--b-near);
+}
+
+.lossy {
+  color: var(--lossy);
+  background: var(--b-lossy);
+}

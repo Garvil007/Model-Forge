@@ -1,0 +1,23 @@
+.field {
+  display: block;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.input {
+  display: block;
+  width: 100%;
+  max-width: var(--field-max-width);
+  margin-top: var(--space-1);
+  padding: var(--space-4) var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+}
+
+.help {
+  display: block;
+  font-weight: var(--font-weight-regular);
+  color: var(--muted);
+  font-size: var(--font-size-xs);
+}

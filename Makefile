@@ -1,4 +1,4 @@
-.PHONY: up down api web worker test lint
+.PHONY: up down api web worker test lint shot shot-stories storybook
 
 up:
 	docker compose up -d
@@ -26,3 +26,12 @@ lint:
 	cd apps/api && ruff check . && mypy app
 	cd workers && ruff check . && mypy core ops
 	npm run lint --prefix apps/web
+
+storybook:
+	npm run storybook --prefix apps/web
+
+shot:
+	npm run shot --prefix apps/web -- --page $(PAGE)
+
+shot-stories:
+	npm run shot-stories --prefix apps/web

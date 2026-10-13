@@ -1,0 +1,53 @@
+.drop {
+  display: block;
+  border: 2px dashed var(--line);
+  border-radius: var(--radius-md);
+  padding: var(--space-9) var(--space-7);
+  text-align: center;
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.dropOver,
+.drop:hover {
+  border-color: var(--accent);
+  color: var(--ink);
+}
+
+.dropStrong {
+  display: block;
+  color: var(--ink);
+  font-size: var(--font-size-lg);
+  margin-bottom: var(--space-1);
+}
+
+.hiddenInput {
+  position: absolute;
+  width: var(--space-0);
+  height: var(--space-0);
+  opacity: 0;
+}
+
+.field {
+  display: block;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.plainInput {
+  display: block;
+  width: 100%;
+  max-width: var(--field-max-width);
+  margin-top: var(--space-1);
+  padding: var(--space-4) var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+}
+
+.help {
+  display: block;
+  font-weight: var(--font-weight-regular);
+  color: var(--muted);
+  font-size: var(--font-size-xs);
+}

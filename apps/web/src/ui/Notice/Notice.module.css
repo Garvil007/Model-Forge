@@ -1,0 +1,20 @@
+.notice {
+  padding: var(--space-4) var(--space-5);
+  font-size: var(--font-size-sm);
+  border-left: 3px solid transparent;
+}
+
+.info {
+  background: var(--soft);
+  border-left-color: var(--line);
+}
+
+.warning {
+  background: var(--notice-bg);
+  border-left-color: var(--near);
+}
+
+.error {
+  background: var(--error-bg);
+  border-left-color: var(--lossy);
+}

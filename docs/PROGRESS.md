@@ -8,7 +8,18 @@ Update at the end of every day. Check items off as "Done when" criteria pass.
       catalog test proves parity with the prototype. `make up` (LocalStack via docker compose)
       is written and reviewed but unverified live — Docker Desktop's daemon wasn't running in
       this environment, so `docker compose up` itself hasn't actually been exercised yet.
-- [ ] Day 2: Design tokens, primitives and the screenshot loop — Storybook shows every primitive in both themes, screenshots match the prototype, stylelint rejects a hardcoded color.
+- [x] Day 2: Design tokens, primitives and the screenshot loop — `src/styles/tokens.css` carries
+      every color/spacing/radius/type value from the prototype plus light/dark redefinitions; 15
+      CSS-Module primitives (Button, Chip, Panel, Tabs, Badge, Select, NumberInput, TextInput,
+      Range, Toggle, FileInput, Spinner, Notice, Skeleton, Tooltip) plus a `ThemeProvider` /
+      `ThemeToggle` live under `src/ui`, each with a Storybook story and a Vitest + Testing
+      Library test (62 tests, all green). Storybook had to move to v10 (not 8 as originally
+      planned) since `@storybook/react-vite` only supports the repo's Vite 8 from v10 onward —
+      see `docs/FRONTEND.md`. `make shot-stories` captured all 32 stories at 1280px/390px in both
+      themes (128 PNGs in `apps/web/.screenshots/`); spot-checked against the prototype, no
+      visual mismatches found. `stylelint` (custom config) rejects raw hex colors and px
+      font-size/spacing outside `tokens.css`; wired into `make lint`. `make test` and `make lint`
+      pass end to end for `apps/web`.
 - [ ] Day 3: The catalog-driven core — selecting a technique/method with params behaves exactly like the prototype; adding a fake param to catalog JSON shows up with no code change.
 - [ ] Day 4: Model panel, uploads and the mock backend — "upload" a 2 GB fake file with progress/resume, detected details shown, every dev-panel failure scenario renders sensibly.
 - [ ] Day 5: Running a job, progress and results — every dev-panel scenario runs and the UI is never confusing, blank or stuck.

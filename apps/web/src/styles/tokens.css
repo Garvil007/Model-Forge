@@ -1,0 +1,133 @@
+/* Design tokens extracted from docs/ui-prototype.html. Every primitive reads
+   these — no hex colors or raw px sizes anywhere else (enforced by stylelint). */
+:root {
+  --paper: #edf0f3;
+  --panel: #fff;
+  --ink: #16202b;
+  --muted: #5b6875;
+  --line: #cbd3db;
+  --soft: #f4f6f8;
+  --accent: #2a4fd6;
+  --on-accent: #fff;
+  --lossless: #1c7c54;
+  --near: #9a620a;
+  --lossy: #b23a3a;
+  --notice-bg: #fff6e5;
+  --error-bg: #fcecec;
+  --b-ok: #e3f2ea;
+  --b-near: #fbf0dc;
+  --b-lossy: #f8e3e3;
+  --font-family: 'Instrument Sans', 'Segoe UI', system-ui, sans-serif;
+
+  /* Spacing scale: every gap/padding value used in the prototype (4/6/8/10/12/14/16/20/24/40px),
+     plus the 1px/2px micro-offsets the prototype uses for visually-hidden inputs and switch knobs. */
+  --space-0: 1px;
+  --space-0-5: 2px;
+  --space-1: 4px;
+  --space-2: 6px;
+  --space-3: 8px;
+  --space-4: 10px;
+  --space-5: 12px;
+  --space-6: 14px;
+  --space-7: 16px;
+  --space-8: 20px;
+  --space-9: 24px;
+  --space-10: 40px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-pill: 999px;
+  --field-max-width: 440px;
+  --field-range-width: 360px;
+  --font-size-xs: 13px;
+  --font-size-sm: 14px;
+  --font-size-md: 15px;
+  --font-size-base: 16px;
+  --font-size-lg: 17px;
+  --font-size-xl: 18px;
+  --font-size-headline: clamp(28px, 4vw, 40px);
+  --font-size-display: clamp(32px, 5vw, 52px);
+  --line-height-tight: 1.05;
+  --line-height-snug: 1.1;
+  --line-height-base: 1.5;
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --focus-ring: 3px solid var(--accent);
+  --focus-ring-offset: 2px;
+
+  box-sizing: border-box;
+  padding-top: env(safe-area-inset-top, 0);
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --paper: #10161d;
+    --panel: #18212b;
+    --ink: #e6ebf0;
+    --muted: #9aa7b4;
+    --line: #33414f;
+    --soft: #1e2935;
+    --accent: #6f8cff;
+    --on-accent: #0b1020;
+    --lossless: #5cc99a;
+    --near: #e0a847;
+    --lossy: #f07c7c;
+    --notice-bg: #2e2616;
+    --error-bg: #34191b;
+    --b-ok: #16332a;
+    --b-near: #33280f;
+    --b-lossy: #3a1c1e;
+  }
+}
+
+:root[data-theme='dark'] {
+  --paper: #10161d;
+  --panel: #18212b;
+  --ink: #e6ebf0;
+  --muted: #9aa7b4;
+  --line: #33414f;
+  --soft: #1e2935;
+  --accent: #6f8cff;
+  --on-accent: #0b1020;
+  --lossless: #5cc99a;
+  --near: #e0a847;
+  --lossy: #f07c7c;
+  --notice-bg: #2e2616;
+  --error-bg: #34191b;
+  --b-ok: #16332a;
+  --b-near: #33280f;
+  --b-lossy: #3a1c1e;
+}
+
+html {
+  scroll-padding-top: env(safe-area-inset-top, 0);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: inherit;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: var(--font-size-base) / var(--line-height-base) var(--font-family);
+  font-variant-numeric: tabular-nums;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}

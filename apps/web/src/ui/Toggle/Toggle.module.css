@@ -1,0 +1,60 @@
+.label {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+.track {
+  --track-width: 36px;
+  --track-height: 20px;
+
+  width: var(--track-width);
+  height: var(--track-height);
+  border-radius: var(--radius-pill);
+  background: var(--line);
+  position: relative;
+  flex: none;
+  transition: background-color 0.15s ease;
+}
+
+.track::after {
+  content: '';
+  position: absolute;
+  top: var(--space-0-5);
+  left: var(--space-0-5);
+  width: calc(var(--track-height) - var(--space-1));
+  height: calc(var(--track-height) - var(--space-1));
+  border-radius: 50%;
+  background: var(--panel);
+  transition: transform 0.15s ease;
+}
+
+.checkbox {
+  position: absolute;
+  width: var(--space-0);
+  height: var(--space-0);
+  opacity: 0;
+}
+
+.checkbox:checked + .track {
+  background: var(--accent);
+}
+
+.checkbox:checked + .track::after {
+  transform: translateX(16px);
+}
+
+.checkbox:focus-visible + .track {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .track,
+  .track::after {
+    transition: none;
+  }
+}

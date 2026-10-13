@@ -1,0 +1,30 @@
+.field {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  max-width: var(--field-range-width);
+  margin-top: var(--space-1);
+}
+
+.slider {
+  flex: 1;
+  accent-color: var(--accent);
+}
+
+.output {
+  min-width: 48px;
+  text-align: right;
+  font-weight: var(--font-weight-semibold);
+}
+
+.help {
+  display: block;
+  font-weight: var(--font-weight-regular);
+  color: var(--muted);
+  font-size: var(--font-size-xs);
+}
