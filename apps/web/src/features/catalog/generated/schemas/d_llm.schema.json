@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LLM distillation",
+  "type": "object",
+  "properties": {
+    "student": {
+      "type": "string",
+      "enum": [
+        "layerdrop",
+        "small"
+      ]
+    },
+    "data": {
+      "type": "string",
+      "enum": [
+        "synthetic",
+        "upload"
+      ]
+    },
+    "texts": {
+      "type": "string",
+      "description": "Uploaded object key or filename"
+    },
+    "tokens": {
+      "type": "string",
+      "enum": [
+        "250M",
+        "1B",
+        "5B"
+      ]
+    }
+  }
+}

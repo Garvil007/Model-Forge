@@ -1,0 +1,30 @@
+.bar {
+  border-top: 1px solid var(--line);
+  margin-top: var(--space-10);
+}
+
+.inner {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: var(--space-8) var(--space-9);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-8);
+  color: var(--muted);
+  font-size: var(--font-size-xs);
+}
+
+.links {
+  display: flex;
+  gap: var(--space-8);
+}
+
+.links a {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.links a:hover {
+  color: var(--ink);
+}

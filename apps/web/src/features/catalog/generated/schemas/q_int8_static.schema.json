@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "INT8 static (calibrated)",
+  "type": "object",
+  "properties": {
+    "calib": {
+      "type": "string",
+      "description": "Uploaded object key or filename"
+    },
+    "samples": {
+      "type": "number",
+      "minimum": 50,
+      "maximum": 1000,
+      "multipleOf": 50
+    },
+    "per_channel": {
+      "type": "boolean"
+    },
+    "method": {
+      "type": "string",
+      "enum": [
+        "minmax",
+        "entropy",
+        "percentile"
+      ]
+    }
+  },
+  "required": [
+    "calib"
+  ]
+}

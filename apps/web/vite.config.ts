@@ -18,7 +18,8 @@ export default defineConfig({
       test: {
         environment: 'jsdom',
         setupFiles: ['./src/test/setup.ts'],
-        globals: true
+        globals: true,
+        exclude: ['**/node_modules/**', '**/dist/**', 'e2e/**']
       }
     }, {
       extends: true,
@@ -30,6 +31,7 @@ export default defineConfig({
       })],
       test: {
         name: 'storybook',
+        exclude: ['**/node_modules/**', '**/dist/**', 'e2e/**'],
         browser: {
           enabled: true,
           headless: true,

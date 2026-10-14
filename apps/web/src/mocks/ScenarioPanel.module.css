@@ -1,0 +1,18 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  border: 1px dashed var(--line);
+}
+
+.heading {
+  font-size: var(--font-size-md);
+  margin: 0;
+}
+
+.hint {
+  color: var(--muted);
+  font-size: var(--font-size-xs);
+  word-break: break-all;
+}

@@ -1,0 +1,22 @@
+.info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+}
+
+.list {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-1) var(--space-4);
+  font-size: var(--font-size-sm);
+  margin: 0;
+}
+
+.list dt {
+  color: var(--muted);
+}
+
+.list dd {
+  margin: 0;
+}

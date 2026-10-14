@@ -127,6 +127,10 @@ select {
   color: inherit;
 }
 
+a {
+  color: var(--accent);
+}
+
 :focus-visible {
   outline: var(--focus-ring);
   outline-offset: var(--focus-ring-offset);

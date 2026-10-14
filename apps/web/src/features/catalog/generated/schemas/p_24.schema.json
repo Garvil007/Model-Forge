@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "2:4 semi-structured sparsity",
+  "type": "object",
+  "properties": {
+    "finetune": {
+      "type": "boolean"
+    },
+    "train_data": {
+      "type": "string",
+      "description": "Uploaded object key or filename"
+    },
+    "epochs": {
+      "type": "number",
+      "minimum": 1,
+      "maximum": 100
+    }
+  }
+}

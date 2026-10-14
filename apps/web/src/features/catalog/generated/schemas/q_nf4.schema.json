@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bitsandbytes NF4",
+  "type": "object",
+  "properties": {
+    "double": {
+      "type": "boolean"
+    },
+    "compute": {
+      "type": "string",
+      "enum": [
+        "bf16",
+        "fp16"
+      ]
+    }
+  }
+}

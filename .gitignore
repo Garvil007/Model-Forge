@@ -14,6 +14,10 @@ dist-ssr/
 *.local
 storybook-static/
 .screenshots/
+test-results/
+playwright-report/
+blob-report/
+.lighthouseci/
 
 # Env
 .env

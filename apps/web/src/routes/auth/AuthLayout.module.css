@@ -1,0 +1,39 @@
+.wrap {
+  max-width: var(--field-max-width);
+  margin: var(--space-10) auto;
+  padding: 0 var(--space-9);
+}
+
+.title {
+  font-size: var(--font-size-headline);
+  font-weight: var(--font-weight-bold);
+  margin: 0 0 var(--space-3);
+}
+
+.subtitle {
+  color: var(--muted);
+  margin: 0 0 var(--space-8);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.footerLink {
+  margin-top: var(--space-8);
+  font-size: var(--font-size-sm);
+  color: var(--muted);
+  text-align: center;
+}
+
+.fieldError {
+  color: var(--lossy);
+  font-size: var(--font-size-xs);
+}
+
+.strength {
+  font-size: var(--font-size-xs);
+  color: var(--muted);
+}

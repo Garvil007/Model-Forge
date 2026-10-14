@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Response-based distillation",
+  "type": "object",
+  "properties": {
+    "student": {
+      "type": "string",
+      "enum": [
+        "half_width",
+        "half_depth",
+        "compact",
+        "custom"
+      ]
+    },
+    "student_file": {
+      "type": "string",
+      "description": "Uploaded object key or filename"
+    },
+    "train_data": {
+      "type": "string",
+      "description": "Uploaded object key or filename"
+    },
+    "epochs": {
+      "type": "number",
+      "minimum": 1,
+      "maximum": 500
+    },
+    "temp": {
+      "type": "number",
+      "minimum": 1,
+      "maximum": 10,
+      "multipleOf": 0.5
+    },
+    "alpha": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "multipleOf": 0.05
+    }
+  },
+  "required": [
+    "train_data"
+  ]
+}

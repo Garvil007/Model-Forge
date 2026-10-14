@@ -1,0 +1,12 @@
+.panel {
+  margin-top: var(--space-9);
+}
+
+.heading {
+  margin: 0 0 var(--space-6);
+  font-size: var(--font-size-lg);
+}
+
+.techniques {
+  margin-bottom: var(--space-8);
+}

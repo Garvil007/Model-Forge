@@ -1,0 +1,9 @@
+.estimate {
+  font-size: var(--font-size-sm);
+  border-top: 1px solid var(--line);
+  padding-top: var(--space-4);
+}
+
+.estimate b {
+  font-weight: var(--font-weight-bold);
+}

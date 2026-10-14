@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GGUF (llama.cpp)",
+  "type": "object",
+  "properties": {
+    "qtype": {
+      "type": "string",
+      "enum": [
+        "Q8_0",
+        "Q6_K",
+        "Q5_K_M",
+        "Q4_K_M",
+        "Q3_K_M",
+        "Q2_K"
+      ]
+    },
+    "imatrix": {
+      "type": "boolean"
+    },
+    "imatrix_text": {
+      "type": "string",
+      "description": "Uploaded object key or filename"
+    }
+  }
+}

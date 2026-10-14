@@ -1,0 +1,45 @@
+.wrap {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: var(--space-9);
+}
+
+.title {
+  font-size: var(--font-size-headline);
+  font-weight: var(--font-weight-bold);
+  margin: 0 0 var(--space-5);
+  text-align: center;
+}
+
+.subtitle {
+  color: var(--muted);
+  text-align: center;
+  margin: 0 0 var(--space-10);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--space-8);
+}
+
+.plan {
+  text-align: center;
+}
+
+.price {
+  font-size: var(--font-size-display);
+  font-weight: var(--font-weight-bold);
+  margin: var(--space-5) 0;
+}
+
+.features {
+  list-style: none;
+  padding: 0;
+  margin: var(--space-6) 0;
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}

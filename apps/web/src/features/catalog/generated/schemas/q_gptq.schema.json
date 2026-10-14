@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GPTQ",
+  "type": "object",
+  "properties": {
+    "bits": {
+      "type": "string",
+      "enum": [
+        "8",
+        "4",
+        "3"
+      ]
+    },
+    "group": {
+      "type": "string",
+      "enum": [
+        "32",
+        "64",
+        "128"
+      ]
+    },
+    "dataset": {
+      "type": "string",
+      "enum": [
+        "wikitext2",
+        "c4",
+        "custom"
+      ]
+    },
+    "calib": {
+      "type": "string",
+      "description": "Uploaded object key or filename"
+    },
+    "act_order": {
+      "type": "boolean"
+    }
+  }
+}

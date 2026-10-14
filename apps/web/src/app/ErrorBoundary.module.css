@@ -1,0 +1,26 @@
+.wrap {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: var(--space-10) var(--space-9);
+  text-align: center;
+}
+
+.title {
+  font-size: var(--font-size-headline);
+  font-weight: var(--font-weight-bold);
+  margin: 0 0 var(--space-5);
+}
+
+.message {
+  color: var(--muted);
+  max-width: 62ch;
+  margin: 0 auto var(--space-8);
+}
+
+.details {
+  text-align: left;
+  max-width: 62ch;
+  margin: var(--space-8) auto 0;
+  color: var(--muted);
+  font-size: var(--font-size-xs);
+}

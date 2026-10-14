@@ -1,0 +1,35 @@
+.skipLink {
+  position: fixed;
+  left: var(--space-5);
+  top: var(--space-5);
+  z-index: 200;
+  background: var(--accent);
+  color: var(--on-accent);
+  padding: var(--space-4) var(--space-6);
+  border-radius: var(--radius-sm);
+  transform: translateY(-200%);
+}
+
+.skipLink:focus {
+  transform: translateY(0);
+}
+
+.main {
+  min-height: 60vh;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .main {
+    animation: fade-in 0.15s ease-out;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}

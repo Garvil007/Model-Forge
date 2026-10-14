@@ -1,0 +1,1510 @@
+{
+  "techniques": [
+    {
+      "id": "quantization",
+      "name": "Quantization",
+      "tag": "Fewer bits per weight",
+      "mechanism": "Lowers bit-precision (e.g. FP32 to INT8)",
+      "hardwareImpact": "Drastically drops RAM; accelerates CPU/NPU",
+      "complexity": "Low to medium",
+      "bars": [
+        1,
+        0.5,
+        0
+      ]
+    },
+    {
+      "id": "pruning",
+      "name": "Pruning",
+      "tag": "Remove weights",
+      "mechanism": "Deletes less impactful weights or channels",
+      "hardwareImpact": "Shrinks file size; accelerates structured execution",
+      "complexity": "Medium, needs fine-tuning",
+      "bars": [
+        1,
+        1,
+        0
+      ]
+    },
+    {
+      "id": "distillation",
+      "name": "Knowledge distillation",
+      "tag": "Train a smaller copy",
+      "mechanism": "Trains a smaller model to copy a larger one",
+      "hardwareImpact": "Creates a native, lightweight architecture",
+      "complexity": "High, needs retraining",
+      "bars": [
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "id": "lowrank",
+      "name": "Low-rank factorization",
+      "tag": "Split big matrices",
+      "mechanism": "Splits massive matrices into smaller sub-matrices",
+      "hardwareImpact": "Speeds up mathematical operations",
+      "complexity": "Medium",
+      "bars": [
+        1,
+        1,
+        0
+      ]
+    }
+  ],
+  "operations": [
+    {
+      "id": "q_fp16",
+      "technique": "quantization",
+      "label": "FP16 (half precision)",
+      "description": "Stores weights as 16-bit floats. The safest first step for any model.",
+      "accuracy": "near-lossless",
+      "typicalImpact": "under 0.1% accuracy change",
+      "timeEstimate": "seconds",
+      "sourceFormats": [
+        "onnx",
+        "torch",
+        "torchscript",
+        "keras",
+        "safetensors",
+        "yolo"
+      ],
+      "workerImage": "cpu-base",
+      "queue": "cpu",
+      "requiredBitWidth": 32
+    },
+    {
+      "id": "q_bf16",
+      "technique": "quantization",
+      "label": "BF16 (brain float)",
+      "description": "16-bit with FP32's range. The standard format for training and serving LLMs.",
+      "accuracy": "near-lossless",
+      "typicalImpact": "under 0.1% accuracy change",
+      "timeEstimate": "seconds",
+      "sourceFormats": [
+        "torch",
+        "safetensors"
+      ],
+      "workerImage": "cpu-base",
+      "queue": "cpu",
+      "requiredBitWidth": 32
+    },
+    {
+      "id": "q_int8_dyn",
+      "technique": "quantization",
+      "label": "INT8 dynamic",
+      "description": "8-bit weights, activations quantized on the fly. No data needed. Works best on transformers and RNNs.",
+      "accuracy": "lossy",
+      "typicalImpact": "0.5 to 2% on CNNs, less on transformers",
+      "timeEstimate": "under a minute",
+      "sourceFormats": [
+        "onnx",
+        "torch",
+        "torchscript",
+        "keras"
+      ],
+      "workerImage": "cpu-base",
+      "queue": "cpu"
+    },
+    {
+      "id": "q_int8_static",
+      "technique": "quantization",
+      "label": "INT8 static (calibrated)",
+      "description": "Weights and activations in 8-bit, using sample inputs to pick the ranges. Fastest option on CPUs, phones and NPUs.",
+      "accuracy": "lossy",
+      "typicalImpact": "usually under 1% with good calibration data",
+      "timeEstimate": "1 to 10 minutes",
+      "sourceFormats": [
+        "onnx",
+        "torch",
+        "torchscript",
+        "keras",
+        "yolo"
+      ],
+      "workerImage": "cpu-base",
+      "queue": "cpu",
+      "params": [
+        {
+          "name": "calib",
+          "label": "Calibration inputs",
+          "type": "file",
+          "help": "100 to 1,000 real inputs, e.g. a zip of images. No labels needed.",
+          "required": true,
+          "accept": ".zip,.npz,.npy"
+        },
+        {
+          "name": "samples",
+          "label": "Samples to use",
+          "type": "range",
+          "default": 300,
+          "min": 50,
+          "max": 1000,
+          "step": 50
+        },
+        {
+          "name": "per_channel",
+          "label": "Per-channel weight scales (more accurate)",
+          "type": "check",
+          "default": true
+        },
+        {
+          "name": "method",
+          "label": "Range estimation",
+          "type": "select",
+          "default": "minmax",
+          "options": [
+            {
+              "value": "minmax",
+              "label": "Min/max"
+            },
+            {
+              "value": "entropy",
+              "label": "Entropy (KL divergence)"
+            },
+            {
+              "value": "percentile",
+              "label": "Percentile 99.99%"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "q_gguf",
+      "technique": "quantization",
+      "label": "GGUF (llama.cpp)",
+      "description": "Block-wise quantization for llama.cpp, Ollama and LM Studio. Runs LLMs on laptops and CPUs.",
+      "accuracy": "lossy",
+      "typicalImpact": "depends on the type below",
+      "timeEstimate": "2 to 10 minutes",
+      "sourceFormats": [
+        "safetensors",
+        "torch"
+      ],
+      "workerImage": "gpu-base",
+      "queue": "cpu",
+      "allowedFamilies": [
+        "llm"
+      ],
+      "params": [
+        {
+          "name": "qtype",
+          "label": "Quantization type",
+          "type": "select",
+          "default": "Q4_K_M",
+          "options": [
+            {
+              "value": "Q8_0",
+              "label": "Q8_0, 8.5 bits, almost lossless"
+            },
+            {
+              "value": "Q6_K",
+              "label": "Q6_K, 6.6 bits, very high quality"
+            },
+            {
+              "value": "Q5_K_M",
+              "label": "Q5_K_M, 5.7 bits, high quality"
+            },
+            {
+              "value": "Q4_K_M",
+              "label": "Q4_K_M, 4.8 bits, recommended balance"
+            },
+            {
+              "value": "Q3_K_M",
+              "label": "Q3_K_M, 3.9 bits, small, noticeable loss"
+            },
+            {
+              "value": "Q2_K",
+              "label": "Q2_K, 3.4 bits, smallest, large loss"
+            }
+          ]
+        },
+        {
+          "name": "imatrix",
+          "label": "Use an importance matrix (better quality below 5 bits)",
+          "type": "check",
+          "default": true
+        },
+        {
+          "name": "imatrix_text",
+          "label": "Calibration text",
+          "type": "file",
+          "help": "Optional. Uses a general English sample if left empty.",
+          "accept": ".txt,.jsonl",
+          "showIf": {
+            "field": "imatrix",
+            "equals": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "q_gptq",
+      "technique": "quantization",
+      "label": "GPTQ",
+      "description": "Quantizes weights layer by layer while correcting the error it introduces. For GPU serving with vLLM, TGI or Transformers.",
+      "accuracy": "lossy",
+      "typicalImpact": "about 2 to 4% perplexity increase at 4-bit",
+      "timeEstimate": "10 to 60 minutes on a GPU",
+      "sourceFormats": [
+        "safetensors",
+        "torch"
+      ],
+      "workerImage": "gpu-base",
+      "queue": "gpu",
+      "allowedFamilies": [
+        "llm"
+      ],
+      "params": [
+        {
+          "name": "bits",
+          "label": "Bits",
+          "type": "select",
+          "default": "4",
+          "options": [
+            {
+              "value": "8",
+              "label": "8-bit"
+            },
+            {
+              "value": "4",
+              "label": "4-bit"
+            },
+            {
+              "value": "3",
+              "label": "3-bit"
+            }
+          ]
+        },
+        {
+          "name": "group",
+          "label": "Group size",
+          "type": "select",
+          "default": "128",
+          "options": [
+            {
+              "value": "32",
+              "label": "32 (more accurate, larger)"
+            },
+            {
+              "value": "64",
+              "label": "64"
+            },
+            {
+              "value": "128",
+              "label": "128 (standard)"
+            }
+          ]
+        },
+        {
+          "name": "dataset",
+          "label": "Calibration dataset",
+          "type": "select",
+          "default": "wikitext2",
+          "options": [
+            {
+              "value": "wikitext2",
+              "label": "WikiText-2"
+            },
+            {
+              "value": "c4",
+              "label": "C4"
+            },
+            {
+              "value": "custom",
+              "label": "Upload my own"
+            }
+          ]
+        },
+        {
+          "name": "calib",
+          "label": "Your calibration text",
+          "type": "file",
+          "accept": ".txt,.jsonl",
+          "showIf": {
+            "field": "dataset",
+            "equals": "custom"
+          }
+        },
+        {
+          "name": "act_order",
+          "label": "Activation ordering (desc_act)",
+          "type": "check",
+          "default": true
+        }
+      ]
+    },
+    {
+      "id": "q_awq",
+      "technique": "quantization",
+      "label": "AWQ (activation-aware)",
+      "description": "Protects the small share of weights that matter most, based on activations. Often a little more accurate than GPTQ at 4-bit.",
+      "accuracy": "lossy",
+      "typicalImpact": "about 2 to 3% perplexity increase",
+      "timeEstimate": "10 to 30 minutes on a GPU",
+      "sourceFormats": [
+        "safetensors",
+        "torch"
+      ],
+      "workerImage": "gpu-base",
+      "queue": "gpu",
+      "allowedFamilies": [
+        "llm"
+      ],
+      "params": [
+        {
+          "name": "group",
+          "label": "Group size",
+          "type": "select",
+          "default": "128",
+          "options": [
+            {
+              "value": "64",
+              "label": "64"
+            },
+            {
+              "value": "128",
+              "label": "128 (standard)"
+            }
+          ]
+        },
+        {
+          "name": "kernel",
+          "label": "Kernel format",
+          "type": "select",
+          "default": "gemm",
+          "options": [
+            {
+              "value": "gemm",
+              "label": "GEMM (best for batches)"
+            },
+            {
+              "value": "gemv",
+              "label": "GEMV (best for single requests)"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "q_nf4",
+      "technique": "quantization",
+      "label": "bitsandbytes NF4",
+      "description": "4-bit NormalFloat, loaded directly with Transformers. The format used for QLoRA fine-tuning.",
+      "accuracy": "lossy",
+      "typicalImpact": "about 3 to 4% perplexity increase",
+      "timeEstimate": "under a minute",
+      "sourceFormats": [
+        "safetensors",
+        "torch"
+      ],
+      "workerImage": "cpu-base",
+      "queue": "cpu",
+      "allowedFamilies": [
+        "llm"
+      ],
+      "params": [
+        {
+          "name": "double",
+          "label": "Double quantization (saves ~0.4 bits per weight)",
+          "type": "check",
+          "default": true
+        },
+        {
+          "name": "compute",
+          "label": "Compute dtype",
+          "type": "select",
+          "default": "bf16",
+          "options": [
+            {
+              "value": "bf16",
+              "label": "BF16"
+            },
+            {
+              "value": "fp16",
+              "label": "FP16"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "p_magnitude",
+      "technique": "pruning",
+      "label": "Magnitude pruning (unstructured)",
+      "description": "Zeroes out the smallest weights anywhere in the network. Shrinks the file when stored sparse; speedups need a sparse-aware runtime.",
+      "accuracy": "lossy",
+      "typicalImpact": "little loss up to ~50% with fine-tuning, drops fast past 80%",
+      "timeEstimate": "minutes, or hours with fine-tuning",
+      "sourceFormats": [
+        "torch",
+        "keras",
+        "safetensors",
+        "onnx"
+      ],
+      "workerImage": "cpu-base",
+      "queue": "cpu",
+      "params": [
+        {
+          "name": "sparsity",
+          "label": "Sparsity",
+          "type": "range",
+          "default": 50,
+          "min": 10,
+          "max": 95,
+          "step": 5,
+          "unit": "%"
+        },
+        {
+          "name": "scope",
+          "label": "Scope",
+          "type": "select",
+          "default": "global",
+          "options": [
+            {
+              "value": "global",
+              "label": "Global (best weights across all layers)"
+            },
+            {
+              "value": "layer",
+              "label": "Same % in every layer"
+            }
+          ]
+        },
+        {
+          "name": "storage",
+          "label": "Save as",
+          "type": "select",
+          "default": "sparse",
+          "options": [
+            {
+              "value": "sparse",
+              "label": "Sparse tensors (smaller file)"
+            },
+            {
+              "value": "dense",
+              "label": "Dense with zeros (same size, zips well)"
+            }
+          ]
+        },
+        {
+          "name": "finetune",
+          "label": "Fine-tune afterwards to recover accuracy",
+          "type": "check",
+          "default": true
+        },
+        {
+          "name": "train_data",
+          "label": "Training data",
+          "type": "file",
+          "help": "Images folder (zip), CSV, JSONL or Parquet. A few thousand samples is often enough for fine-tuning.",
+          "accept": ".zip,.tar,.csv,.jsonl,.parquet",
+          "showIf": {
+            "field": "finetune",
+            "equals": true
+          }
+        },
+        {
+          "name": "epochs",
+          "label": "Fine-tuning epochs",
+          "type": "number",
+          "default": 3,
+          "min": 1,
+          "max": 100,
+          "showIf": {
+            "field": "finetune",
+            "equals": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "p_structured",
+      "technique": "pruning",
+      "label": "Structured pruning (channels / filters)",
+      "description": "Removes whole channels, filters or attention heads, so the network becomes narrower. Faster on every device, no special runtime.",
+      "accuracy": "lossy",
+      "typicalImpact": "1 to 3% at 30% with fine-tuning",
+      "timeEstimate": "hours with fine-tuning",
+      "sourceFormats": [
+        "torch",
+        "keras",
+        "yolo",
+        "safetensors"
+      ],
+      "workerImage": "cpu-base",
+      "queue": "cpu",
+      "params": [
+        {
+          "name": "ratio",
+          "label": "Channels to remove",
+          "type": "range",
+          "default": 30,
+          "min": 10,
+          "max": 70,
+          "step": 5,
+          "unit": "%"
+        },
+        {
+          "name": "criterion",
+          "label": "Importance score",
+          "type": "select",
+          "default": "l1",
+          "options": [
+            {
+              "value": "l1",
+              "label": "L1 norm"
+            },
+            {
+              "value": "l2",
+              "label": "L2 norm"
+            },
+            {
+              "value": "taylor",
+              "label": "Taylor expansion (uses data)"
+            }
+          ]
+        },
+        {
+          "name": "finetune",
+          "label": "Fine-tune afterwards to recover accuracy",
+          "type": "check",
+          "default": true
+        },
+        {
+          "name": "train_data",
+          "label": "Training data",
+          "type": "file",
+          "help": "Images folder (zip), CSV, JSONL or Parquet. A few thousand samples is often enough for fine-tuning.",
+          "accept": ".zip,.tar,.csv,.jsonl,.parquet",
+          "showIf": {
+            "field": "finetune",
+            "equals": true
+          }
+        },
+        {
+          "name": "epochs",
+          "label": "Fine-tuning epochs",
+          "type": "number",
+          "default": 3,
+          "min": 1,
+          "max": 100,
+          "showIf": {
+            "field": "finetune",
+            "equals": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "p_24",
+      "technique": "pruning",
+      "label": "2:4 semi-structured sparsity",
+      "description": "Exactly 2 of every 4 weights are zero. NVIDIA Ampere and newer GPUs run this pattern about 1.3 to 1.6 times faster.",
+      "accuracy": "lossy",
+      "typicalImpact": "1 to 2% with fine-tuning",
+      "timeEstimate": "minutes, or hours with fine-tuning",
+      "sourceFormats": [
+        "torch",
+        "safetensors",
+        "onnx"
+      ],
+      "workerImage": "cpu-base",
+      "queue": "cpu",
+      "params": [
+        {
+          "name": "finetune",
+          "label": "Fine-tune afterwards to recover accuracy",
+          "type": "check",
+          "default": true
+        },
+        {
+          "name": "train_data",
+          "label": "Training data",
+          "type": "file",
+          "help": "Images folder (zip), CSV, JSONL or Parquet. A few thousand samples is often enough for fine-tuning.",
+          "accept": ".zip,.tar,.csv,.jsonl,.parquet",
+          "showIf": {
+            "field": "finetune",
+            "equals": true
+          }
+        },
+        {
+          "name": "epochs",
+          "label": "Fine-tuning epochs",
+          "type": "number",
+          "default": 3,
+          "min": 1,
+          "max": 100,
+          "showIf": {
+            "field": "finetune",
+            "equals": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "p_wanda",
+      "technique": "pruning",
+      "label": "One-shot LLM pruning (Wanda / SparseGPT)",
+      "description": "Prunes an LLM in one pass using a small calibration set. No retraining needed.",
+      "accuracy": "lossy",
+      "typicalImpact": "about 5 to 10% perplexity increase at 50%",
+      "timeEstimate": "10 to 40 minutes on a GPU",
+      "sourceFormats": [
+        "safetensors",
+        "torch"
+      ],
+      "workerImage": "gpu-base",
+      "queue": "gpu",
+      "allowedFamilies": [
+        "llm"
+      ],
+      "params": [
+        {
+          "name": "algo",
+          "label": "Algorithm",
+          "type": "select",
+          "default": "wanda",
+          "options": [
+            {
+              "value": "wanda",
+              "label": "Wanda (fast)"
+            },
+            {
+              "value": "sparsegpt",
+              "label": "SparseGPT (more accurate, slower)"
+            }
+          ]
+        },
+        {
+          "name": "pattern",
+          "label": "Sparsity pattern",
+          "type": "select",
+          "default": "unstructured",
+          "options": [
+            {
+              "value": "unstructured",
+              "label": "Unstructured"
+            },
+            {
+              "value": "2:4",
+              "label": "2:4 (GPU speedup)"
+            }
+          ]
+        },
+        {
+          "name": "sparsity",
+          "label": "Sparsity",
+          "type": "range",
+          "default": 50,
+          "min": 10,
+          "max": 70,
+          "step": 5,
+          "unit": "%",
+          "showIf": {
+            "field": "pattern",
+            "equals": "unstructured"
+          }
+        }
+      ]
+    },
+    {
+      "id": "d_logit",
+      "technique": "distillation",
+      "label": "Response-based distillation",
+      "description": "A smaller student learns to match your model's output probabilities. Your model only needs to run, so any runnable format works as the teacher.",
+      "accuracy": "lossy",
+      "typicalImpact": "student usually within 1 to 3% of the teacher",
+      "timeEstimate": "hours to days on a GPU",
+      "sourceFormats": [
+        "onnx",
+        "tflite",
+        "keras",
+        "torch",
+        "torchscript",
+        "yolo"
+      ],
+      "workerImage": "gpu-base",
+      "queue": "gpu",
+      "allowedFamilies": [
+        "vision",
+        "other"
+      ],
+      "params": [
+        {
+          "name": "student",
+          "label": "Student model",
+          "type": "select",
+          "default": "half_width",
+          "options": [
+            {
+              "value": "half_width",
+              "label": "Same design, half the width (~25% of parameters)"
+            },
+            {
+              "value": "half_depth",
+              "label": "Same design, half the depth (~50%)"
+            },
+            {
+              "value": "compact",
+              "label": "Compact preset (MobileNet / TinyBERT style, ~15%)"
+            },
+            {
+              "value": "custom",
+              "label": "Upload my own student"
+            }
+          ]
+        },
+        {
+          "name": "student_file",
+          "label": "Student architecture",
+          "type": "file",
+          "accept": ".py,.onnx,.keras,.pt",
+          "showIf": {
+            "field": "student",
+            "equals": "custom"
+          }
+        },
+        {
+          "name": "train_data",
+          "label": "Training data",
+          "type": "file",
+          "help": "Images folder (zip), CSV, JSONL or Parquet. A few thousand samples is often enough for fine-tuning.",
+          "required": true,
+          "accept": ".zip,.tar,.csv,.jsonl,.parquet"
+        },
+        {
+          "name": "epochs",
+          "label": "Epochs",
+          "type": "number",
+          "default": 30,
+          "min": 1,
+          "max": 500
+        },
+        {
+          "name": "temp",
+          "label": "Temperature",
+          "type": "range",
+          "default": 4,
+          "help": "Higher values soften the teacher's outputs so the student learns more from its near-misses.",
+          "min": 1,
+          "max": 10,
+          "step": 0.5
+        },
+        {
+          "name": "alpha",
+          "label": "Weight on teacher vs. true labels",
+          "type": "range",
+          "default": 0.7,
+          "min": 0,
+          "max": 1,
+          "step": 0.05
+        }
+      ]
+    },
+    {
+      "id": "d_feature",
+      "technique": "distillation",
+      "label": "Feature-based distillation",
+      "description": "The student also copies the teacher's intermediate layers, not just the outputs. Usually a little more accurate; needs PyTorch or Keras for the teacher.",
+      "accuracy": "lossy",
+      "typicalImpact": "student usually within 1 to 2% of the teacher",
+      "timeEstimate": "hours to days on a GPU",
+      "sourceFormats": [
+        "torch",
+        "torchscript",
+        "keras",
+        "yolo"
+      ],
+      "workerImage": "gpu-base",
+      "queue": "gpu",
+      "allowedFamilies": [
+        "vision",
+        "other"
+      ],
+      "params": [
+        {
+          "name": "student",
+          "label": "Student model",
+          "type": "select",
+          "default": "half_width",
+          "options": [
+            {
+              "value": "half_width",
+              "label": "Same design, half the width (~25%)"
+            },
+            {
+              "value": "half_depth",
+              "label": "Same design, half the depth (~50%)"
+            },
+            {
+              "value": "custom",
+              "label": "Upload my own student"
+            }
+          ]
+        },
+        {
+          "name": "student_file",
+          "label": "Student architecture",
+          "type": "file",
+          "accept": ".py,.onnx,.keras,.pt",
+          "showIf": {
+            "field": "student",
+            "equals": "custom"
+          }
+        },
+        {
+          "name": "layers",
+          "label": "Layers to match",
+          "type": "select",
+          "default": "stages",
+          "options": [
+            {
+              "value": "last",
+              "label": "Last block only"
+            },
+            {
+              "value": "stages",
+              "label": "End of every stage"
+            },
+            {
+              "value": "auto",
+              "label": "Pick automatically"
+            }
+          ]
+        },
+        {
+          "name": "train_data",
+          "label": "Training data",
+          "type": "file",
+          "help": "Images folder (zip), CSV, JSONL or Parquet. A few thousand samples is often enough for fine-tuning.",
+          "required": true,
+          "accept": ".zip,.tar,.csv,.jsonl,.parquet"
+        },
+        {
+          "name": "epochs",
+          "label": "Epochs",
+          "type": "number",
+          "default": 30,
+          "min": 1,
+          "max": 500
+        }
+      ]
+    },
+    {
+      "id": "d_llm",
+      "technique": "distillation",
+      "label": "LLM distillation",
+      "description": "Trains a smaller language model on your model's responses and token probabilities.",
+      "accuracy": "lossy",
+      "typicalImpact": "keeps most task quality; general knowledge drops",
+      "timeEstimate": "days on multiple GPUs",
+      "sourceFormats": [
+        "safetensors",
+        "torch"
+      ],
+      "workerImage": "gpu-base",
+      "queue": "gpu",
+      "allowedFamilies": [
+        "llm"
+      ],
+      "params": [
+        {
+          "name": "student",
+          "label": "Student model",
+          "type": "select",
+          "default": "layerdrop",
+          "options": [
+            {
+              "value": "layerdrop",
+              "label": "Drop half the layers, then distill (~50%)"
+            },
+            {
+              "value": "small",
+              "label": "Smaller model from the same family (~40%)"
+            }
+          ]
+        },
+        {
+          "name": "data",
+          "label": "Training text",
+          "type": "select",
+          "default": "synthetic",
+          "options": [
+            {
+              "value": "synthetic",
+              "label": "Generate from the teacher"
+            },
+            {
+              "value": "upload",
+              "label": "Upload prompts or text"
+            }
+          ]
+        },
+        {
+          "name": "texts",
+          "label": "Your prompts or text",
+          "type": "file",
+          "accept": ".jsonl,.txt,.parquet",
+          "showIf": {
+            "field": "data",
+            "equals": "upload"
+          }
+        },
+        {
+          "name": "tokens",
+          "label": "Training tokens",
+          "type": "select",
+          "default": "1B",
+          "options": [
+            {
+              "value": "250M",
+              "label": "250 million"
+            },
+            {
+              "value": "1B",
+              "label": "1 billion"
+            },
+            {
+              "value": "5B",
+              "label": "5 billion"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "l_svd",
+      "technique": "lowrank",
+      "label": "Truncated SVD (linear layers)",
+      "description": "Replaces each large weight matrix with two thin ones. Biggest effect on transformers and fully connected layers.",
+      "accuracy": "lossy",
+      "typicalImpact": "under 1% when keeping 95% of the energy",
+      "timeEstimate": "minutes, or hours with fine-tuning",
+      "sourceFormats": [
+        "torch",
+        "keras",
+        "safetensors",
+        "onnx"
+      ],
+      "workerImage": "cpu-base",
+      "queue": "cpu",
+      "params": [
+        {
+          "name": "mode",
+          "label": "Choose rank by",
+          "type": "select",
+          "default": "energy",
+          "options": [
+            {
+              "value": "energy",
+              "label": "Keep a share of the matrix energy"
+            },
+            {
+              "value": "fraction",
+              "label": "Keep a fixed share of the rank"
+            }
+          ]
+        },
+        {
+          "name": "energy",
+          "label": "Energy to keep",
+          "type": "range",
+          "default": 95,
+          "min": 80,
+          "max": 99,
+          "step": 1,
+          "unit": "%",
+          "showIf": {
+            "field": "mode",
+            "equals": "energy"
+          }
+        },
+        {
+          "name": "rank",
+          "label": "Rank to keep",
+          "type": "range",
+          "default": 25,
+          "min": 5,
+          "max": 75,
+          "step": 5,
+          "unit": "%",
+          "showIf": {
+            "field": "mode",
+            "equals": "fraction"
+          }
+        },
+        {
+          "name": "layers",
+          "label": "Apply to",
+          "type": "select",
+          "default": "mlp",
+          "options": [
+            {
+              "value": "mlp",
+              "label": "Feed-forward / dense layers"
+            },
+            {
+              "value": "attn",
+              "label": "Dense and attention projections"
+            }
+          ]
+        },
+        {
+          "name": "finetune",
+          "label": "Fine-tune afterwards to recover accuracy",
+          "type": "check",
+          "default": false
+        },
+        {
+          "name": "train_data",
+          "label": "Training data",
+          "type": "file",
+          "help": "Images folder (zip), CSV, JSONL or Parquet. A few thousand samples is often enough for fine-tuning.",
+          "accept": ".zip,.tar,.csv,.jsonl,.parquet",
+          "showIf": {
+            "field": "finetune",
+            "equals": true
+          }
+        },
+        {
+          "name": "epochs",
+          "label": "Fine-tuning epochs",
+          "type": "number",
+          "default": 3,
+          "min": 1,
+          "max": 100,
+          "showIf": {
+            "field": "finetune",
+            "equals": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "l_tucker",
+      "technique": "lowrank",
+      "label": "Tucker / CP decomposition (conv layers)",
+      "description": "Splits each convolution into a chain of cheaper ones. Speeds up CNNs on CPUs and mobile.",
+      "accuracy": "lossy",
+      "typicalImpact": "1 to 2% at 30% rank with fine-tuning",
+      "timeEstimate": "minutes, or hours with fine-tuning",
+      "sourceFormats": [
+        "torch",
+        "keras"
+      ],
+      "workerImage": "cpu-base",
+      "queue": "cpu",
+      "allowedFamilies": [
+        "vision"
+      ],
+      "params": [
+        {
+          "name": "kind",
+          "label": "Decomposition",
+          "type": "select",
+          "default": "tucker2",
+          "options": [
+            {
+              "value": "tucker2",
+              "label": "Tucker-2 (stable, recommended)"
+            },
+            {
+              "value": "cp",
+              "label": "CP (smaller, harder to fine-tune)"
+            }
+          ]
+        },
+        {
+          "name": "rank",
+          "label": "Rank to keep",
+          "type": "range",
+          "default": 30,
+          "min": 10,
+          "max": 75,
+          "step": 5,
+          "unit": "%"
+        },
+        {
+          "name": "finetune",
+          "label": "Fine-tune afterwards to recover accuracy",
+          "type": "check",
+          "default": true
+        },
+        {
+          "name": "train_data",
+          "label": "Training data",
+          "type": "file",
+          "help": "Images folder (zip), CSV, JSONL or Parquet. A few thousand samples is often enough for fine-tuning.",
+          "accept": ".zip,.tar,.csv,.jsonl,.parquet",
+          "showIf": {
+            "field": "finetune",
+            "equals": true
+          }
+        },
+        {
+          "name": "epochs",
+          "label": "Fine-tuning epochs",
+          "type": "number",
+          "default": 3,
+          "min": 1,
+          "max": 100,
+          "showIf": {
+            "field": "finetune",
+            "equals": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "c_onnx",
+      "technique": "convert",
+      "label": "ONNX",
+      "description": "Portable graph that runs on ONNX Runtime across CPUs, GPUs and the browser.",
+      "accuracy": "lossless",
+      "typicalImpact": "no accuracy change",
+      "timeEstimate": "seconds to minutes",
+      "sourceFormats": [
+        "torch",
+        "torchscript",
+        "keras",
+        "yolo",
+        "safetensors"
+      ],
+      "workerImage": "cpu-base",
+      "queue": "cpu",
+      "targetFormat": "onnx",
+      "params": [
+        {
+          "name": "opset",
+          "label": "Opset version",
+          "type": "select",
+          "default": "17",
+          "options": [
+            {
+              "value": "13",
+              "label": "13"
+            },
+            {
+              "value": "15",
+              "label": "15"
+            },
+            {
+              "value": "17",
+              "label": "17"
+            },
+            {
+              "value": "18",
+              "label": "18"
+            },
+            {
+              "value": "20",
+              "label": "20"
+            }
+          ]
+        },
+        {
+          "name": "shape",
+          "label": "Example input shape",
+          "type": "text",
+          "default": "1,3,224,224",
+          "help": "Comma-separated, including batch.",
+          "onlyFor": [
+            "torch",
+            "torchscript"
+          ]
+        },
+        {
+          "name": "dynamic",
+          "label": "Dynamic batch size",
+          "type": "check",
+          "default": true
+        }
+      ]
+    },
+    {
+      "id": "c_tflite",
+      "technique": "convert",
+      "label": "TensorFlow Lite",
+      "description": "For Android, iOS and microcontrollers. Converted to NHWC layout.",
+      "accuracy": "near-lossless",
+      "typicalImpact": "tiny numerical differences",
+      "timeEstimate": "1 to 5 minutes",
+      "sourceFormats": [
+        "keras",
+        "onnx",
+        "yolo",
+        "torch"
+      ],
+      "workerImage": "cpu-base",
+      "queue": "cpu",
+      "targetFormat": "tflite",
+      "params": [
+        {
+          "name": "precision",
+          "label": "Precision",
+          "type": "select",
+          "default": "fp32",
+          "options": [
+            {
+              "value": "fp32",
+              "label": "FP32"
+            },
+            {
+              "value": "fp16",
+              "label": "FP16"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "c_torchscript",
+      "technique": "convert",
+      "label": "TorchScript",
+      "description": "PyTorch model that loads without its Python source code.",
+      "accuracy": "lossless",
+      "typicalImpact": "no accuracy change",
+      "timeEstimate": "seconds",
+      "sourceFormats": [
+        "onnx",
+        "yolo",
+        "torch"
+      ],
+      "workerImage": "cpu-base",
+      "queue": "cpu",
+      "targetFormat": "torchscript"
+    },
+    {
+      "id": "c_savedmodel",
+      "technique": "convert",
+      "label": "TensorFlow SavedModel",
+      "description": "For TF Serving and TensorFlow.js.",
+      "accuracy": "lossless",
+      "typicalImpact": "no accuracy change",
+      "timeEstimate": "1 to 5 minutes",
+      "sourceFormats": [
+        "onnx",
+        "keras"
+      ],
+      "workerImage": "cpu-base",
+      "queue": "cpu",
+      "targetFormat": "savedmodel"
+    },
+    {
+      "id": "c_safetensors",
+      "technique": "convert",
+      "label": "safetensors",
+      "description": "Safe, fast-loading weights format used by Hugging Face.",
+      "accuracy": "lossless",
+      "typicalImpact": "no accuracy change",
+      "timeEstimate": "seconds",
+      "sourceFormats": [
+        "torch"
+      ],
+      "workerImage": "cpu-base",
+      "queue": "cpu",
+      "targetFormat": "safetensors"
+    },
+    {
+      "id": "c_gguf",
+      "technique": "convert",
+      "label": "GGUF",
+      "description": "For llama.cpp, Ollama and LM Studio. To also quantize, use GGUF under Compress.",
+      "accuracy": "near-lossless",
+      "typicalImpact": "tiny numerical differences",
+      "timeEstimate": "1 to 5 minutes",
+      "sourceFormats": [
+        "safetensors",
+        "torch"
+      ],
+      "workerImage": "cpu-base",
+      "queue": "cpu",
+      "allowedFamilies": [
+        "llm"
+      ],
+      "targetFormat": "gguf",
+      "params": [
+        {
+          "name": "outtype",
+          "label": "Weight type",
+          "type": "select",
+          "default": "f16",
+          "options": [
+            {
+              "value": "f32",
+              "label": "F32"
+            },
+            {
+              "value": "f16",
+              "label": "F16"
+            },
+            {
+              "value": "bf16",
+              "label": "BF16"
+            },
+            {
+              "value": "q8_0",
+              "label": "Q8_0"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "c_openvino",
+      "technique": "convert",
+      "label": "OpenVINO IR",
+      "description": "Optimized for Intel CPUs, GPUs and NPUs.",
+      "accuracy": "near-lossless",
+      "typicalImpact": "tiny numerical differences",
+      "timeEstimate": "1 to 5 minutes",
+      "sourceFormats": [
+        "onnx",
+        "torch",
+        "keras",
+        "yolo",
+        "safetensors"
+      ],
+      "workerImage": "cpu-base",
+      "queue": "cpu",
+      "targetFormat": "openvino",
+      "params": [
+        {
+          "name": "precision",
+          "label": "Precision",
+          "type": "select",
+          "default": "fp16",
+          "options": [
+            {
+              "value": "fp32",
+              "label": "FP32"
+            },
+            {
+              "value": "fp16",
+              "label": "FP16"
+            },
+            {
+              "value": "int8",
+              "label": "INT8 weights"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "c_tensorrt",
+      "technique": "convert",
+      "label": "TensorRT engine",
+      "description": "Fastest inference on NVIDIA GPUs. The engine only runs on the GPU model and TensorRT version it was built for.",
+      "accuracy": "near-lossless",
+      "typicalImpact": "tiny numerical differences",
+      "timeEstimate": "2 to 20 minutes",
+      "sourceFormats": [
+        "onnx",
+        "yolo"
+      ],
+      "workerImage": "gpu-base",
+      "queue": "gpu",
+      "targetFormat": "tensorrt",
+      "params": [
+        {
+          "name": "precision",
+          "label": "Precision",
+          "type": "select",
+          "default": "fp16",
+          "options": [
+            {
+              "value": "fp32",
+              "label": "FP32"
+            },
+            {
+              "value": "fp16",
+              "label": "FP16"
+            },
+            {
+              "value": "int8",
+              "label": "INT8 (needs calibration inputs)"
+            }
+          ]
+        },
+        {
+          "name": "calib",
+          "label": "Calibration inputs",
+          "type": "file",
+          "accept": ".zip,.npz",
+          "showIf": {
+            "field": "precision",
+            "equals": "int8"
+          }
+        },
+        {
+          "name": "gpu",
+          "label": "Target GPU",
+          "type": "select",
+          "default": "l4",
+          "options": [
+            {
+              "value": "t4",
+              "label": "T4"
+            },
+            {
+              "value": "l4",
+              "label": "L4"
+            },
+            {
+              "value": "a100",
+              "label": "A100"
+            },
+            {
+              "value": "h100",
+              "label": "H100"
+            },
+            {
+              "value": "jetson",
+              "label": "Jetson Orin"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "c_coreml",
+      "technique": "convert",
+      "label": "Core ML",
+      "description": "For iPhone, iPad and Mac, including the Apple Neural Engine.",
+      "accuracy": "near-lossless",
+      "typicalImpact": "tiny numerical differences",
+      "timeEstimate": "1 to 5 minutes",
+      "sourceFormats": [
+        "torch",
+        "torchscript",
+        "keras",
+        "yolo"
+      ],
+      "workerImage": "cpu-base",
+      "queue": "cpu",
+      "targetFormat": "coreml",
+      "params": [
+        {
+          "name": "precision",
+          "label": "Precision",
+          "type": "select",
+          "default": "fp16",
+          "options": [
+            {
+              "value": "fp32",
+              "label": "FP32"
+            },
+            {
+              "value": "fp16",
+              "label": "FP16"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

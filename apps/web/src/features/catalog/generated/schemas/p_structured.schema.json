@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Structured pruning (channels / filters)",
+  "type": "object",
+  "properties": {
+    "ratio": {
+      "type": "number",
+      "minimum": 10,
+      "maximum": 70,
+      "multipleOf": 5
+    },
+    "criterion": {
+      "type": "string",
+      "enum": [
+        "l1",
+        "l2",
+        "taylor"
+      ]
+    },
+    "finetune": {
+      "type": "boolean"
+    },
+    "train_data": {
+      "type": "string",
+      "description": "Uploaded object key or filename"
+    },
+    "epochs": {
+      "type": "number",
+      "minimum": 1,
+      "maximum": 100
+    }
+  }
+}

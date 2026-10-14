@@ -1,0 +1,91 @@
+.hero {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: var(--space-10) var(--space-9) var(--space-9);
+  text-align: center;
+}
+
+.heroTitle {
+  font-size: var(--font-size-display);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-tight);
+  margin: 0 0 var(--space-6);
+}
+
+.heroSubtitle {
+  color: var(--muted);
+  max-width: 62ch;
+  margin: 0 auto var(--space-8);
+  font-size: var(--font-size-lg);
+}
+
+.heroActions {
+  display: flex;
+  gap: var(--space-5);
+  justify-content: center;
+}
+
+.section {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: var(--space-10) var(--space-9);
+}
+
+.sectionTitle {
+  font-size: var(--font-size-headline);
+  font-weight: var(--font-weight-bold);
+  text-align: center;
+  margin: 0 0 var(--space-9);
+}
+
+.formats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  justify-content: center;
+}
+
+.steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-8);
+}
+
+.step {
+  text-align: center;
+}
+
+.stepNumber {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--space-10);
+  height: var(--space-10);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: var(--font-weight-bold);
+  margin-bottom: var(--space-5);
+}
+
+.cta {
+  text-align: center;
+  padding: var(--space-10) var(--space-9);
+}
+
+.toolWrap {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: var(--space-9);
+}
+
+.toolTitle {
+  font-size: var(--font-size-headline);
+  font-weight: var(--font-weight-bold);
+  margin: 0 0 var(--space-3);
+}
+
+.toolSubtitle {
+  color: var(--muted);
+  margin: 0 0 var(--space-8);
+}

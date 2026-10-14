@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AWQ (activation-aware)",
+  "type": "object",
+  "properties": {
+    "group": {
+      "type": "string",
+      "enum": [
+        "64",
+        "128"
+      ]
+    },
+    "kernel": {
+      "type": "string",
+      "enum": [
+        "gemm",
+        "gemv"
+      ]
+    }
+  }
+}

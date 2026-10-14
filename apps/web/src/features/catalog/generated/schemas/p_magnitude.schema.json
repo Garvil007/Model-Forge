@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Magnitude pruning (unstructured)",
+  "type": "object",
+  "properties": {
+    "sparsity": {
+      "type": "number",
+      "minimum": 10,
+      "maximum": 95,
+      "multipleOf": 5
+    },
+    "scope": {
+      "type": "string",
+      "enum": [
+        "global",
+        "layer"
+      ]
+    },
+    "storage": {
+      "type": "string",
+      "enum": [
+        "sparse",
+        "dense"
+      ]
+    },
+    "finetune": {
+      "type": "boolean"
+    },
+    "train_data": {
+      "type": "string",
+      "description": "Uploaded object key or filename"
+    },
+    "epochs": {
+      "type": "number",
+      "minimum": 1,
+      "maximum": 100
+    }
+  }
+}

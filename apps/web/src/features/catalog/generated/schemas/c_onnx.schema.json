@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ONNX",
+  "type": "object",
+  "properties": {
+    "opset": {
+      "type": "string",
+      "enum": [
+        "13",
+        "15",
+        "17",
+        "18",
+        "20"
+      ]
+    },
+    "shape": {
+      "type": "string"
+    },
+    "dynamic": {
+      "type": "boolean"
+    }
+  }
+}

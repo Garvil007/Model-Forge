@@ -138,9 +138,130 @@ def build_param_schema(op: OperationSpec) -> dict[str, Any]:
     return schema
 
 
+def build_catalog_schema() -> dict[str, Any]:
+    """JSON Schema (draft 2020-12) describing catalog.json's own shape.
+
+    Frontend TS types for ``Catalog``/``Technique``/``Operation``/``Param`` are generated from
+    this via json-schema-to-typescript (see apps/web's `generate:types` script and the root
+    `make types` target), so the UI can never drift from what ``build_catalog`` actually emits.
+    """
+    return {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Catalog",
+        "type": "object",
+        "properties": {
+            "techniques": {"type": "array", "items": {"$ref": "#/$defs/Technique"}},
+            "operations": {"type": "array", "items": {"$ref": "#/$defs/Operation"}},
+        },
+        "required": ["techniques", "operations"],
+        "$defs": {
+            "Technique": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string"},
+                    "name": {"type": "string"},
+                    "tag": {"type": "string"},
+                    "mechanism": {"type": "string"},
+                    "hardwareImpact": {"type": "string"},
+                    "complexity": {"type": "string"},
+                    "bars": {"type": "array", "items": {"type": "number"}},
+                },
+                "required": [
+                    "id",
+                    "name",
+                    "tag",
+                    "mechanism",
+                    "hardwareImpact",
+                    "complexity",
+                    "bars",
+                ],
+            },
+            "ParamOption": {
+                "type": "object",
+                "properties": {"value": {"type": "string"}, "label": {"type": "string"}},
+                "required": ["value", "label"],
+            },
+            "ShowIf": {
+                "type": "object",
+                "properties": {"field": {"type": "string"}, "equals": {}},
+                "required": ["field", "equals"],
+            },
+            "Param": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "label": {"type": "string"},
+                    "type": {
+                        "type": "string",
+                        "enum": ["select", "range", "check", "number", "text", "file"],
+                    },
+                    "default": {},
+                    "help": {"type": "string"},
+                    "required": {"type": "boolean"},
+                    "options": {"type": "array", "items": {"$ref": "#/$defs/ParamOption"}},
+                    "min": {"type": "number"},
+                    "max": {"type": "number"},
+                    "step": {"type": "number"},
+                    "unit": {"type": "string"},
+                    "accept": {"type": "string"},
+                    "onlyFor": {"type": "array", "items": {"type": "string"}},
+                    "showIf": {"$ref": "#/$defs/ShowIf"},
+                },
+                "required": ["name", "label", "type"],
+            },
+            "Operation": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string"},
+                    "technique": {
+                        "type": "string",
+                        "enum": [
+                            "quantization",
+                            "pruning",
+                            "distillation",
+                            "lowrank",
+                            "convert",
+                        ],
+                    },
+                    "label": {"type": "string"},
+                    "description": {"type": "string"},
+                    "accuracy": {
+                        "type": "string",
+                        "enum": ["lossless", "near-lossless", "lossy"],
+                    },
+                    "typicalImpact": {"type": "string"},
+                    "timeEstimate": {"type": "string"},
+                    "sourceFormats": {"type": "array", "items": {"type": "string"}},
+                    "workerImage": {"type": "string"},
+                    "queue": {"type": "string", "enum": ["cpu", "gpu"]},
+                    "allowedFamilies": {"type": "array", "items": {"type": "string"}},
+                    "requiredBitWidth": {"type": "number"},
+                    "targetFormat": {"type": "string"},
+                    "params": {"type": "array", "items": {"$ref": "#/$defs/Param"}},
+                },
+                "required": [
+                    "id",
+                    "technique",
+                    "label",
+                    "description",
+                    "accuracy",
+                    "typicalImpact",
+                    "timeEstimate",
+                    "sourceFormats",
+                    "workerImage",
+                    "queue",
+                ],
+            },
+        },
+    }
+
+
 def write_catalog(out_dir: Path) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "catalog.json").write_text(json.dumps(build_catalog(), indent=2), encoding="utf-8")
+    (out_dir / "catalog.schema.json").write_text(
+        json.dumps(build_catalog_schema(), indent=2), encoding="utf-8"
+    )
     schema_dir = out_dir / "schemas"
     schema_dir.mkdir(parents=True, exist_ok=True)
     for op in OPERATIONS:
