@@ -16,16 +16,27 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - run: pip install -e packages/catalog[dev] -e apps/api[dev] -e workers[dev]
+      - run: pip install -e packages/catalog[dev] -e packages/db[dev] -e apps/api[dev] -e workers[dev]
       - run: npm ci --prefix apps/web
       - run: |
           cd packages/catalog && ruff check . && mypy src
+          cd ../db && ruff check . && mypy src
           cd ../../apps/api && ruff check . && mypy app
           cd ../../workers && ruff check . && mypy core ops
       - run: npm run lint --prefix apps/web
 
   test:
     runs-on: ubuntu-latest
+    services:
+      localstack:
+        image: localstack/localstack:3
+        ports:
+          - "4566:4566"
+        env:
+          SERVICES: s3,sqs,dynamodb,kms
+          AWS_DEFAULT_REGION: us-east-1
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -34,10 +45,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - run: pip install -e packages/catalog[dev] -e apps/api[dev] -e workers[dev]
+      - run: pip install -e packages/catalog[dev] -e packages/db[dev] -e apps/api[dev] -e workers[dev]
       - run: npm ci --prefix apps/web
       - run: |
           cd packages/catalog && python -m pytest
+          cd ../db && python -m pytest
           cd ../../apps/api && python -m pytest
           cd ../../workers && python -m pytest
+        env:
+          MF_AWS_ENDPOINT_URL: http://localhost:4566
       - run: npm run test --prefix apps/web

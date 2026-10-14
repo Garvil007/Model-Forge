@@ -28,10 +28,27 @@ aws $ENDPOINT sqs create-queue --queue-name gpu-jobs --attributes "{
   \"RedrivePolicy\": \"{\\\"deadLetterTargetArn\\\":\\\"${gpu_dlq_arn}\\\",\\\"maxReceiveCount\\\":\\\"3\\\"}\"
 }"
 
+# Single table for Users, Models, Datasets, Jobs, JobEvents and Usage counters.
+# See docs/decisions.md ("Day 7: Single-table DynamoDB schema") for the access patterns
+# behind this key design.
 aws $ENDPOINT dynamodb create-table \
-  --table-name modelforge-jobs \
-  --attribute-definitions AttributeName=pk,AttributeType=S AttributeName=sk,AttributeType=S \
-  --key-schema AttributeName=pk,KeyType=HASH AttributeName=sk,KeyType=RANGE \
+  --table-name modelforge \
+  --attribute-definitions \
+      AttributeName=PK,AttributeType=S \
+      AttributeName=SK,AttributeType=S \
+      AttributeName=GSI1PK,AttributeType=S \
+      AttributeName=GSI1SK,AttributeType=S \
+  --key-schema AttributeName=PK,KeyType=HASH AttributeName=SK,KeyType=RANGE \
+  --global-secondary-indexes \
+      "[{\"IndexName\":\"GSI1\",\"KeySchema\":[{\"AttributeName\":\"GSI1PK\",\"KeyType\":\"HASH\"},{\"AttributeName\":\"GSI1SK\",\"KeyType\":\"RANGE\"}],\"Projection\":{\"ProjectionType\":\"ALL\"}}]" \
   --billing-mode PAY_PER_REQUEST
 
-echo "modelforge: LocalStack init complete (buckets, queues + DLQs, table)."
+aws $ENDPOINT dynamodb wait table-exists --table-name modelforge
+aws $ENDPOINT dynamodb update-time-to-live \
+  --table-name modelforge \
+  --time-to-live-specification "Enabled=true,AttributeName=ttl"
+
+# KMS key for envelope-encrypting the user's optional Hugging Face token.
+aws $ENDPOINT kms create-key --description "modelforge hf-token key"
+
+echo "modelforge: LocalStack init complete (buckets, queues + DLQs, table + GSI1 + TTL, KMS key)."

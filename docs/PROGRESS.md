@@ -107,7 +107,33 @@ Update at the end of every day. Check items off as "Done when" criteria pass.
       components (tests exist for all of them; stories were judged lower-value for one-off pages
       vs. reusable primitives, given the time this phase already took — worth reconsidering before
       Day 19 if these pages grow more interactive states).
-- [ ] Day 7: Data layer on DynamoDB — repository tests pass against LocalStack, access patterns documented.
+- [x] Day 7: Data layer on DynamoDB — `packages/db` (`modelforge_db`) is a new shared package
+      (alongside `packages/catalog`) holding a typed repository per entity (`UserRepository`,
+      `ModelRepository`, `DatasetRepository`, `JobRepository`, `JobEventRepository`,
+      `UsageRepository`) over one single-table design: table `modelforge`, one GSI (`GSI1`),
+      on-demand billing. Every item's base-table `PK` starts with `USER#<userId>` (job events:
+      `USER#<userId>#JOB#<jobId>`), so ownership is structural — there's no query shape that
+      returns another user's item. `docs/decisions.md` ("Day 7: Single-table DynamoDB schema")
+      has the full access-pattern table and the key design (GSI1 overloaded across
+      Model/Dataset/Job listings plus the user-by-email lookup) and why `PK` embeds the user id
+      directly rather than an `ownerId` filter checked after the fact. The Hugging Face token is
+      envelope-encrypted with KMS (`KmsEncryptor`) before it ever reaches a DynamoDB item.
+      `ttl.py` sets per-entity retention (JobEvents 14 days, Jobs 90, Models 365; User/Usage
+      items never expire) and the table has native TTL enabled on the `ttl` attribute, so old
+      jobs/events/models age out without a cleanup job. 34 tests in `packages/db/tests/`
+      (`test_users`, `test_models`, `test_datasets_and_usage`, `test_jobs_and_events`, `test_ttl`,
+      and `test_isolation` — which proves user A gets nothing, not an error that would leak
+      existence, when it tries to get/list/update/delete user B's model or job, or list B's job
+      events) ran live against a real LocalStack container (`docker compose up`, table + GSI1 +
+      TTL + KMS key created per test session) — all 34 passed, not just written. `ruff check` and
+      `mypy src` pass for `packages/db`. `infra/localstack/init-aws.sh` and `docker-compose.yml`
+      were updated to match (table renamed from the old `modelforge-jobs` placeholder to
+      `modelforge`, GSI1 + TTL + a KMS key added for local `make up` dev use); `Makefile` and
+      `.github/workflows/ci.yml` run `packages/db`'s tests and lint, with a LocalStack service
+      container added to the CI `test` job so the integration tests actually run there too, not
+      just locally. Not done: wiring the repositories into `apps/api` endpoints or `workers` —
+      out of scope for this day, which was the data layer itself; that's Days 8-10's job as auth,
+      uploads and the job queue land.
 - [ ] Day 8: Login with Cognito — sign up, confirm by email, log in, reach /app; unauthenticated API call returns 401; no day 6 screen needed changing.
 - [ ] Day 9: Uploads straight to S3 — 2 GB file uploads from browser against LocalStack, correct detected format, no model bytes through the API.
 - [ ] Day 10: Jobs, queues and progress — job runs queued → running → succeeded with live stages in the real UI; killing the worker mid-job causes a retry.
