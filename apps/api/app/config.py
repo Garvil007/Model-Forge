@@ -11,6 +11,11 @@ class Settings(BaseSettings):
     app_name: str = "ModelForge API"
     environment: str = "local"
 
+    # Cognito — values come from the AuthStack's CfnOutputs (see infra/stacks/auth_stack.py).
+    cognito_user_pool_id: str = ""
+    cognito_region: str = "us-east-1"
+    cognito_client_id: str = ""
+
 
 def get_settings() -> Settings:
     return Settings()

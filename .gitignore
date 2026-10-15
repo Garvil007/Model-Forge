@@ -24,6 +24,9 @@ blob-report/
 .env.*
 !.env.example
 
+# CDK
+cdk.out/
+
 # Editors / OS
 .vscode/
 .idea/

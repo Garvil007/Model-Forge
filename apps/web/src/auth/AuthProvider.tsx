@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useToast } from '../ui/toast/useToast'
 import { AuthContext, type AuthContextValue } from './AuthContext'
-import { authProvider } from './provider'
+import { attachTokenSync, authProvider } from './provider'
 import type { AuthUser } from './types'
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -59,6 +59,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null)
     showToast({ message: 'Your session expired. Please log in again.', variant: 'warning' })
   }, [showToast])
+
+  useEffect(() => attachTokenSync(expireSession), [expireSession])
 
   const value = useMemo<AuthContextValue>(
     () => ({

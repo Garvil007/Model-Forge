@@ -16,13 +16,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - run: pip install -e packages/catalog[dev] -e packages/db[dev] -e apps/api[dev] -e workers[dev]
+      - run: pip install -e packages/catalog[dev] -e packages/db[dev] -e apps/api[dev] -e workers[dev] -e infra[dev]
       - run: npm ci --prefix apps/web
       - run: |
           cd packages/catalog && ruff check . && mypy src
           cd ../db && ruff check . && mypy src
           cd ../../apps/api && ruff check . && mypy app
           cd ../../workers && ruff check . && mypy core ops
+          cd ../infra && ruff check . && mypy stacks app.py
       - run: npm run lint --prefix apps/web
 
   test:
@@ -45,13 +46,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - run: pip install -e packages/catalog[dev] -e packages/db[dev] -e apps/api[dev] -e workers[dev]
+      - run: pip install -e packages/catalog[dev] -e packages/db[dev] -e apps/api[dev] -e workers[dev] -e infra[dev]
       - run: npm ci --prefix apps/web
       - run: |
           cd packages/catalog && python -m pytest
           cd ../db && python -m pytest
           cd ../../apps/api && python -m pytest
           cd ../../workers && python -m pytest
+          cd ../infra && python -m pytest
         env:
           MF_AWS_ENDPOINT_URL: http://localhost:4566
       - run: npm run test --prefix apps/web

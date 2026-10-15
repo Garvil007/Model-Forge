@@ -11,9 +11,11 @@ dependencies = [
     "fastapi>=0.115",
     "pydantic-settings>=2.5",
     "mangum>=0.17",
+    "PyJWT[crypto]>=2.9",
 ]
-# modelforge-catalog isn't on PyPI: install it editable alongside this package
-# (see Makefile / CI, which run `pip install -e packages/catalog -e apps/api`).
+# modelforge-catalog and modelforge-db aren't on PyPI: install them editable alongside
+# this package (see Makefile / CI, which run
+# `pip install -e packages/catalog -e packages/db -e apps/api`).
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "httpx>=0.27", "uvicorn[standard]>=0.30", "ruff>=0.6", "mypy>=1.11"]

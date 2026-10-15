@@ -134,7 +134,42 @@ Update at the end of every day. Check items off as "Done when" criteria pass.
       just locally. Not done: wiring the repositories into `apps/api` endpoints or `workers` —
       out of scope for this day, which was the data layer itself; that's Days 8-10's job as auth,
       uploads and the job queue land.
-- [ ] Day 8: Login with Cognito — sign up, confirm by email, log in, reach /app; unauthenticated API call returns 401; no day 6 screen needed changing.
+- [x] Day 8: Login with Cognito — `infra/stacks/auth_stack.py` is a new CDK `AuthStack`: a
+      user pool (email sign-in/verification, 12-char password policy requiring upper/lower/
+      digit/symbol, optional TOTP MFA, `EMAIL_ONLY` account recovery), a hosted domain, a
+      public app client (no secret — authorization-code + PKCE, since Cognito requires PKCE
+      once a client has no secret) and an **optional** Google identity provider: `cdk synth`
+      checks SSM Parameter Store for `/modelforge/<env>/google-client-id` and
+      `-client-secret` (metadata only, via `describe_parameters` — the secret's value is
+      never read at synth time, only resolved by CloudFormation at deploy time via
+      `SecretValue.ssm_secure`) and adds the provider only if both exist; `GoogleIdpEnabled`
+      is `false` in this environment, confirmed by a real `cdk synth` run. Email delivery
+      uses Cognito's own built-in sender (free, low daily cap) — SES is the noted upgrade
+      once volume needs it (`docs/COSTS.md`). `infra/tests/test_auth_stack.py` (6 tests, a
+      fake SSM client so they're offline) proves the single user pool, the hosted domain,
+      the client's `GenerateSecret: false` + `AllowedOAuthFlows: [code]`, the Google IdP
+      being skipped when absent *and* added when present, and the `UserPoolId`/
+      `UserPoolClientId`/`HostedDomain` outputs. Only this stack was synthesized/tested here
+      — not deployed to a real AWS account from this session; see the deploy command and the
+      `.env` values it prints in the handoff notes.
+      `apps/web/src/auth/`: `cognitoAuthProvider.ts` implements the existing `AuthProvider`
+      interface against `aws-amplify/auth` (sign up with `autoSignIn`, confirm, sign in, the
+      Google button via `signInWithRedirect` to the hosted UI, forgot/reset password), so
+      `provider.ts` swaps between it and the Day 6 mock behind one `VITE_AUTH_PROVIDER` env
+      var — every Day 6 screen and its tests are unchanged. `attachTokenSync` (Amplify `Hub`
+      listener) keeps `apiClient`'s bearer token in sync on sign-in and silent refresh, and
+      routes a failed refresh to `expireSession()` — the existing session-expired toast, not
+      a blank page. `apps/api/app/auth.py` verifies the access token Cognito issues: a
+      `PyJWKClient` per issuer (built-in TTL cache, no refetch per request) checks signature,
+      issuer, expiry, `token_use == "access"`, and `client_id` match; `current_user`
+      provisions a `UserRecord` via `packages/db`'s `UserRepository` on first sight of a
+      `sub` and reuses it after. `apps/api/tests/test_auth.py` (5 tests, a fake JWKS client —
+      fully offline) covers missing token (401), wrong `token_use`, wrong `client_id`,
+      expired token, and first-request user creation not duplicating on a second request.
+      `make test`/`make lint` pass end to end across `infra`, `apps/api`, and `apps/web`
+      (387 web tests still green, unchanged). Not done: actually deploying the stack and
+      pointing a running app at it — that's an AWS action with real account side effects,
+      left for the user to run (or ask for) explicitly.
 - [ ] Day 9: Uploads straight to S3 — 2 GB file uploads from browser against LocalStack, correct detected format, no model bytes through the API.
 - [ ] Day 10: Jobs, queues and progress — job runs queued → running → succeeded with live stages in the real UI; killing the worker mid-job causes a retry.
 - [ ] Day 11: Worker images and the first quantization methods — every method in this batch passes a round-trip test, real output size near the catalog estimate.

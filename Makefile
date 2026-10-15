@@ -20,6 +20,7 @@ test:
 	cd packages/db && python -m pytest
 	cd apps/api && python -m pytest
 	cd workers && python -m pytest
+	cd infra && python -m pytest
 	npm run test --prefix apps/web
 
 lint:
@@ -27,6 +28,7 @@ lint:
 	cd packages/db && ruff check . && mypy src
 	cd apps/api && ruff check . && mypy app
 	cd workers && ruff check . && mypy core ops
+	cd infra && ruff check . && mypy stacks app.py
 	npm run lint --prefix apps/web
 
 types:
