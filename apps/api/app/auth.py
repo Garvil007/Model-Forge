@@ -8,6 +8,8 @@ email the token happens to carry (often none) and nothing else assumed about the
 
 from __future__ import annotations
 
+import os
+
 from fastapi import Depends, HTTPException, Request, status
 from jwt import PyJWKClient, decode
 from jwt.exceptions import InvalidTokenError
@@ -70,11 +72,39 @@ def get_user_repository() -> UserRepository:
     return UserRepository()
 
 
+def assert_local_auth_allowed(settings: Settings) -> None:
+    """`auth_mode="local"` is a hard bypass of Cognito and must never run outside a
+    developer's own machine. Fail hard (not just warn) if it's set anywhere that looks
+    like a real deployment — a Lambda runtime always sets AWS_LAMBDA_FUNCTION_NAME."""
+    if settings.auth_mode != "local":
+        return
+    if settings.environment != "local" or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
+        raise RuntimeError(
+            'MF_AUTH_MODE="local" is only allowed when MF_ENVIRONMENT="local" and not '
+            "running in Lambda. Refusing to start with an auth bypass enabled here."
+        )
+
+
+def _local_dev_user(settings: Settings, users: UserRepository) -> UserRecord:
+    try:
+        return users.get_by_id(settings.local_dev_user_id)
+    except NotFoundError:
+        return users.create(
+            settings.local_dev_user_id,
+            settings.local_dev_user_email,
+            plan=settings.local_dev_plan,
+        )
+
+
 async def current_user(
     request: Request,
     settings: Settings = Depends(get_settings),  # noqa: B008
     users: UserRepository = Depends(get_user_repository),  # noqa: B008
 ) -> UserRecord:
+    assert_local_auth_allowed(settings)
+    if settings.auth_mode == "local":
+        return _local_dev_user(settings, users)
+
     claims = verify_access_token(_bearer_token(request), settings)
     user_id = str(claims["sub"])
     try:

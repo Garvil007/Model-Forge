@@ -12,6 +12,8 @@ dependencies = [
     "pydantic-settings>=2.5",
     "mangum>=0.17",
     "PyJWT[crypto]>=2.9",
+    "boto3>=1.35",
+    "huggingface-hub>=0.25",
 ]
 # modelforge-catalog and modelforge-db aren't on PyPI: install them editable alongside
 # this package (see Makefile / CI, which run

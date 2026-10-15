@@ -1,0 +1,18 @@
+{
+  "cors": {
+    "allowedMethods": ["PUT", "GET", "HEAD"],
+    "allowedHeaders": ["*"],
+    "exposeHeaders": ["ETag"],
+    "maxAgeSeconds": 3000,
+    "devOrigins": ["http://localhost:5173", "http://localhost:4173"]
+  },
+  "lifecycle": {
+    "abortIncompleteMultipartUploadDays": 1,
+    "retentionTagRules": [
+      { "tagKey": "retention", "tagValue": "7d", "expirationDays": 7 },
+      { "tagKey": "retention", "tagValue": "30d", "expirationDays": 30 }
+    ],
+    "untaggedCatchAllPrefix": "users/",
+    "untaggedCatchAllExpirationDays": 30
+  }
+}

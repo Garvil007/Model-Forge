@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useModel } from '../../api/hooks'
 import { Panel } from '../../ui/Panel/Panel'
 import { Spinner } from '../../ui/Spinner/Spinner'
 import { Notice } from '../../ui/Notice/Notice'
@@ -36,7 +37,27 @@ export function ModelPanel({ onModelReady }: ModelPanelProps) {
   const [checkError, setCheckError] = useState<string | null>(null)
   const [pendingFile, setPendingFile] = useState<File | null>(null)
   const [detected, setDetected] = useState<DetectedModel | null>(null)
+  const [apiModelId, setApiModelId] = useState<string | undefined>(undefined)
   const upload = useFileUpload()
+  const { data: apiModel } = useModel(apiModelId)
+
+  // Once the worker (detect_format / import_hf) finishes, replace the provisional
+  // client-side guess with what the server actually detected.
+  useEffect(() => {
+    if (!apiModel || apiModel.status === 'importing' || apiModel.status === 'checking') return
+    setDetected((current) =>
+      current
+        ? {
+            ...current,
+            format: apiModel.format,
+            family: apiModel.family as DetectedModel['family'],
+            bits: apiModel.bits,
+            params: apiModel.params,
+            inputs: apiModel.inputs,
+          }
+        : current,
+    )
+  }, [apiModel])
 
   useEffect(() => {
     if (upload.state.status !== 'uploading' && upload.state.status !== 'paused') return
@@ -51,7 +72,10 @@ export function ModelPanel({ onModelReady }: ModelPanelProps) {
   const runUpload = (file: File, model: DetectedModel) => {
     upload
       .start(file, model)
-      .then((apiModel) => onModelReady?.({ ...model, id: apiModel.id }))
+      .then((apiModel) => {
+        setApiModelId(apiModel.id)
+        onModelReady?.({ ...model, id: apiModel.id })
+      })
       .catch(() => {
         // Terminal failure is already reflected in upload.state.error; nothing further to do.
       })
@@ -107,7 +131,22 @@ export function ModelPanel({ onModelReady }: ModelPanelProps) {
       {activeTab === 'upload' ? (
         <ModelDropzone onFile={checkFile} onSample={pickSample} disabled={dropzoneBusy} />
       ) : (
-        <HfImportForm onImported={(model) => onModelReady?.(model)} />
+        <HfImportForm
+          onImported={(model) => {
+            setApiModelId(model.id)
+            setDetected({
+              filename: model.filename,
+              format: model.format,
+              family: model.family,
+              bits: model.bits,
+              params: model.params,
+              size: model.size,
+              inputs: model.inputs,
+              metric: model.metric,
+            })
+            onModelReady?.({ ...model, id: model.id })
+          }}
+        />
       )}
 
       {checking && (

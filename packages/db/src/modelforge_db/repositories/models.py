@@ -28,14 +28,16 @@ class ModelRepository:
         size_bytes: int,
         format: str,
         family: str,
-        bits: int | None = None,
+        bits: float | None = None,
         param_count: int | None = None,
         details: dict[str, Any] | None = None,
         status: str = "ready",
+        model_id: str | None = None,
+        ttl_seconds: int | None = None,
     ) -> ModelRecord:
-        model_id = new_id()
+        model_id = model_id or new_id()
         timestamp = now_iso()
-        ttl = ttl_from_now(MODEL_RETENTION_SECONDS)
+        ttl = ttl_from_now(ttl_seconds if ttl_seconds is not None else MODEL_RETENTION_SECONDS)
         item = {
             "PK": user_pk(user_id),
             "SK": model_sk(model_id),
@@ -98,6 +100,64 @@ class ModelRepository:
     def delete(self, user_id: str, model_id: str) -> None:
         self._table.delete_item(Key={"PK": user_pk(user_id), "SK": model_sk(model_id)})
 
+    def apply_detection(
+        self,
+        user_id: str,
+        model_id: str,
+        *,
+        format: str,
+        family: str,
+        bits: float | None,
+        param_count: int | None,
+        details_patch: dict[str, Any],
+        expected_status: str = "checking",
+    ) -> ModelRecord:
+        """Write detection results and flip status checking -> ready, idempotently."""
+        try:
+            response = self._table.update_item(
+                Key={"PK": user_pk(user_id), "SK": model_sk(model_id)},
+                UpdateExpression=(
+                    "SET #status = :ready, #format = :format, family = :family, "
+                    "bits = :bits, paramCount = :paramCount, details = :details, "
+                    "updatedAt = :updatedAt"
+                ),
+                ConditionExpression="attribute_exists(PK) AND #status = :expected",
+                ExpressionAttributeNames={"#status": "status", "#format": "format"},
+                ExpressionAttributeValues={
+                    ":ready": "ready",
+                    ":expected": expected_status,
+                    ":format": format,
+                    ":family": family,
+                    ":bits": decimalize(bits),
+                    ":paramCount": param_count,
+                    ":details": decimalize(details_patch),
+                    ":updatedAt": now_iso(),
+                },
+                ReturnValues="ALL_NEW",
+            )
+        except ClientError as error:
+            if error.response.get("Error", {}).get("Code") == "ConditionalCheckFailedException":
+                return self.get(user_id, model_id)
+            raise
+        return _to_record(response["Attributes"])
+
+    def mark_failed(
+        self, user_id: str, model_id: str, *, code: str, message: str
+    ) -> ModelRecord:
+        response = self._table.update_item(
+            Key={"PK": user_pk(user_id), "SK": model_sk(model_id)},
+            UpdateExpression="SET #status = :failed, details.detectionError = :error, updatedAt = :updatedAt",
+            ConditionExpression="attribute_exists(PK)",
+            ExpressionAttributeNames={"#status": "status"},
+            ExpressionAttributeValues={
+                ":failed": "failed",
+                ":error": {"code": code, "message": message},
+                ":updatedAt": now_iso(),
+            },
+            ReturnValues="ALL_NEW",
+        )
+        return _to_record(response["Attributes"])
+
 
 def _to_record(item: dict[str, Any]) -> ModelRecord:
     return ModelRecord(
@@ -108,7 +168,7 @@ def _to_record(item: dict[str, Any]) -> ModelRecord:
         size_bytes=int(item["sizeBytes"]),
         format=item["format"],
         family=item["family"],
-        bits=int(item["bits"]) if item.get("bits") is not None else None,
+        bits=float(item["bits"]) if item.get("bits") is not None else None,
         param_count=int(item["paramCount"]) if item.get("paramCount") is not None else None,
         details=jsonify(item.get("details", {})),
         status=item["status"],

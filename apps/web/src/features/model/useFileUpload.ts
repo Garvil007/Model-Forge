@@ -70,10 +70,17 @@ export function useFileUpload(): UseFileUploadResult {
 
     setState({ ...IDLE_STATE, status: 'uploading', totalBytes: file.size })
 
-    const upload = await apiClient.post<CreateUploadResponse>('/uploads', {
-      filename: file.name,
-      size: file.size,
-    })
+    let upload: CreateUploadResponse
+    try {
+      upload = await apiClient.post<CreateUploadResponse>('/uploads', {
+        filename: file.name,
+        size: file.size,
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not start the upload.'
+      setState((s) => ({ ...s, status: 'error', error: message }))
+      throw error
+    }
 
     for (let partNumber = 1; partNumber <= upload.totalParts; partNumber++) {
       while (pausedRef.current) {
@@ -88,7 +95,7 @@ export function useFileUpload(): UseFileUploadResult {
 
       for (let attempt = 1; ; attempt++) {
         try {
-          await apiClient.putRaw(`/uploads/${upload.uploadId}/parts/${partNumber}`, chunk)
+          await apiClient.putPresigned(upload.partUrls[partNumber - 1], chunk)
           break
         } catch (error) {
           if (attempt >= MAX_PART_ATTEMPTS) {

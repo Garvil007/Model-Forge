@@ -7,9 +7,17 @@ name = "modelforge-workers"
 version = "0.1.0"
 description = "ModelForge job runners: the Python workers that compress/convert models"
 requires-python = ">=3.11"
-dependencies = []
-# modelforge-catalog isn't on PyPI: install it editable alongside this package
-# (see Makefile / CI, which run `pip install -e packages/catalog -e workers`).
+dependencies = [
+    "boto3>=1.35",
+    "h5py>=3.11",
+    "onnx>=1.16",
+    "huggingface-hub>=0.25",
+]
+# modelforge-catalog and modelforge-db aren't on PyPI: install them editable alongside
+# this package (see Makefile / CI, which run
+# `pip install -e packages/catalog -e packages/db -e workers`).
+# Deliberately NOT a dependency: torch, tensorflow, keras, dill, joblib, or anything else
+# that can unpickle/execute code — see workers/ops/detect.py's module docstring.
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.11"]

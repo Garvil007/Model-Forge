@@ -19,6 +19,10 @@ def dataset_sk(dataset_id: str) -> str:
     return f"DATASET#{dataset_id}"
 
 
+def upload_sk(upload_id: str) -> str:
+    return f"UPLOAD#{upload_id}"
+
+
 def job_sk(job_id: str) -> str:
     return f"JOB#{job_id}"
 

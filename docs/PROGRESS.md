@@ -170,7 +170,53 @@ Update at the end of every day. Check items off as "Done when" criteria pass.
       (387 web tests still green, unchanged). Not done: actually deploying the stack and
       pointing a running app at it — that's an AWS action with real account side effects,
       left for the user to run (or ask for) explicitly.
-- [ ] Day 9: Uploads straight to S3 — 2 GB file uploads from browser against LocalStack, correct detected format, no model bytes through the API.
+- [ ] Day 9: Uploads straight to S3 — `POST /api/uploads` creates an S3 multipart upload and
+      returns presigned `upload_part` URLs (100 MiB parts, S3 key
+      `users/{user_id}/models/{model_id}/{filename}`); `POST /api/uploads/{id}/complete` lists
+      parts, verifies size, completes the upload, creates the model at `status: "checking"`,
+      and enqueues a `detect_format` message on a new dedicated `system-jobs` SQS queue (kept
+      separate from Day 10's `cpu-jobs`/`gpu-jobs` so a sub-second detection doesn't wait behind
+      a Batch/Fargate cold start). `POST /api/models/import-hf` checks repo metadata
+      (`huggingface_hub`, 404/403/400/502 mapped per `HfImportForm.tsx`'s error handling),
+      stores the optional token KMS-encrypted, and enqueues `import_hf`. Per-plan limits: Free
+      2 GiB/7-day retention, Pro+Team 5 GiB/30-day (`packages/catalog/plans.py`); the model's
+      DynamoDB TTL is set to retention+1 day so the record outlives the S3 object.
+      `workers/ops/detect.py` identifies format from file contents (GGUF binary header,
+      safetensors JSON header, ONNX via `onnx`'s protobuf loader, HDF5 `.h5`/`.keras` via
+      `h5py`) and **never unpickles** torch's `.pt`/`.pth`/`.bin`/`.ckpt` zip checkpoints — it
+      decodes the pickle stream with `pickletools.genops` (opcode decode only, nothing
+      instantiated or called) just to read storage dtypes, and gets actual tensor byte counts
+      from the zip's own member sizes, never from executing the pickle graph; `torch`,
+      `tensorflow`/`keras`, `dill` and `joblib` are deliberately absent from
+      `workers/pyproject.toml`. `infra/storage_rules.json` is the single source of truth for S3
+      CORS + lifecycle (7d/30d tag-based expiration, 30-day untagged catch-all, abort-incomplete
+      after 1 day), consumed by both the new `StorageStack`/`QueueStack` CDK stacks and
+      `infra/localstack/init-aws.sh`. Frontend: fixed a real bug found while wiring this up —
+      the Day 4 upload hook was PUTting part bytes to the API itself (`apiClient.putRaw`
+      against `/uploads/.../parts/N`) rather than to S3, which would have blown both the "no
+      model bytes through the API" rule and API Gateway's payload limit; added
+      `apiClient.putPresigned` and pointed `useFileUpload` at `upload.partUrls` instead — the
+      MSW mock's part URLs were already shaped this way, so no mock or test changed. Also
+      added a try/catch around the initial `POST /uploads` (it could leave the UI stuck
+      "uploading" forever on a server rejection) and `useModel` polling while
+      `status ∈ {importing, checking}` so `ModelPanel` shows the server's real detected values,
+      not just the client-side guess, once the worker finishes. `VITE_LIVE_API_PATHS` (new
+      `.env.development`, commented out by default) lets `apps/web/src/mocks/browser.ts`
+      bypass MSW for `/api/uploads` and `/api/models` in local dev only — `server.ts` (tests)
+      imports the handlers directly and is unaffected, and `vite.config.ts` proxies `/api` to
+      `apps/api` for whatever MSW lets through.
+      **Not run live in this session:** no Docker daemon was available here (same limitation
+      noted on Day 1), so `make up`/`make api`/`make worker` and the real browser→LocalStack
+      upload flow were written and reviewed but not executed — someone with Docker should run
+      `make up && make api && make worker && make web`, set `VITE_LIVE_API_PATHS` in
+      `apps/web/.env.development`, and try a real upload before trusting this day's "done
+      when". **Also left for a follow-up, not done here:** TFLite detection only checks the
+      `TFL3` magic bytes and reports a size-based estimate (no FlatBuffers schema parsing);
+      CDK tests for `StorageStack`/`QueueStack`; a Playwright spec against the live stack; an
+      AST-level guard test banning `pickle`/`torch`/etc. imports under `workers/ops/detect*`
+      (the dependency list already omits them, but no test enforces it); subprocess-level
+      sandboxing (timeout/memory limits) around detection parsing; `docs/decisions.md`,
+      `FRONTEND.md` and `COSTS.md` entries for this day's design choices.
 - [ ] Day 10: Jobs, queues and progress — job runs queued → running → succeeded with live stages in the real UI; killing the worker mid-job causes a retry.
 - [ ] Day 11: Worker images and the first quantization methods — every method in this batch passes a round-trip test, real output size near the catalog estimate.
 - [ ] Day 12: INT8 static and real accuracy — INT8 static run on a real small classifier reports believable accuracy before and after.

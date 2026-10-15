@@ -26,11 +26,20 @@ export function useModels() {
   })
 }
 
+const MODEL_POLL_INTERVAL_MS = 2000
+
+/** Polls while the server is still working out the model's real format (`importing` for a
+ * Hugging Face download, `checking` for the detect_format worker job) and stops once it
+ * reaches `ready`/`failed` — or immediately, for the mock, which never sets `status` at all. */
 export function useModel(id: string | undefined) {
   return useQuery({
     queryKey: queryKeys.model(id ?? ''),
     queryFn: ({ signal }) => apiClient.get<ApiModel>(`/models/${id}`, { signal }),
     enabled: Boolean(id),
+    refetchInterval: (query) => {
+      const status = query.state.data?.status
+      return status === 'importing' || status === 'checking' ? MODEL_POLL_INTERVAL_MS : false
+    },
   })
 }
 

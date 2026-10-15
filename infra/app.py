@@ -7,6 +7,8 @@ import os
 from aws_cdk import App, Environment
 
 from stacks.auth_stack import AuthStack
+from stacks.queue_stack import QueueStack
+from stacks.storage_stack import StorageStack
 
 app = App()
 
@@ -32,5 +34,11 @@ AuthStack(
     ],
     env=Environment(account=account, region=region),
 )
+
+StorageStack(
+    app, "ModelForgeStorageStack-dev", env_name="dev", env=Environment(account=account, region=region)
+)
+
+QueueStack(app, "ModelForgeQueueStack-dev", env=Environment(account=account, region=region))
 
 app.synth()

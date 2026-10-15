@@ -19,6 +19,10 @@ export interface ApiModel {
   source: ModelSource
   repoId: string | null
   createdAt: string
+  /** Set by the real API once a model exists server-side (upload/import always start at
+   * "checking"/"importing" — the mock omits this, so callers should treat it as optional). */
+  status?: 'importing' | 'checking' | 'ready' | 'failed'
+  detectionError?: { code: string; message: string } | null
 }
 
 export interface CreateUploadRequest {

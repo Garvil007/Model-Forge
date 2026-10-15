@@ -68,4 +68,17 @@ export const apiClient = {
     if (!response.ok) throw await toApiError(response)
     return response
   },
+  /** PUTs a part directly to a presigned S3 URL — no base URL, no auth header (the
+   * signature in the URL is the auth), and the body never touches our API at all. */
+  async putPresigned(url: string, body: Blob, options?: RequestOptions): Promise<Response> {
+    const response = await fetch(url, { method: 'PUT', body, signal: options?.signal })
+    if (!response.ok) {
+      throw new ApiError(
+        response.status,
+        'upload_failed',
+        `Part upload failed (${response.status}).`,
+      )
+    }
+    return response
+  },
 }

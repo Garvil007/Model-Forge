@@ -26,12 +26,31 @@ class ModelRecord:
     size_bytes: int
     format: str
     family: str
-    bits: int | None
+    bits: float | None
     param_count: int | None
     details: dict[str, Any]
     status: str
     created_at: str
     updated_at: str
+    ttl: int
+
+
+@dataclass(frozen=True)
+class UploadRecord:
+    user_id: str
+    upload_id: str
+    kind: str
+    entity_id: str
+    filename: str
+    safe_name: str
+    s3_key: str
+    s3_upload_id: str
+    declared_size: int
+    part_size: int
+    total_parts: int
+    status: str
+    retention_tag: str
+    created_at: str
     ttl: int
 
 

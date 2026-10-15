@@ -27,10 +27,12 @@ class DatasetRepository:
         s3_key: str,
         size_bytes: int,
         model_id: str | None = None,
+        dataset_id: str | None = None,
+        ttl_seconds: int | None = None,
     ) -> DatasetRecord:
-        dataset_id = new_id()
+        dataset_id = dataset_id or new_id()
         timestamp = now_iso()
-        ttl = ttl_from_now(MODEL_RETENTION_SECONDS)
+        ttl = ttl_from_now(ttl_seconds if ttl_seconds is not None else MODEL_RETENTION_SECONDS)
         item = {
             "PK": user_pk(user_id),
             "SK": dataset_sk(dataset_id),

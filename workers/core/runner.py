@@ -28,5 +28,13 @@ def run_job(job: dict[str, Any]) -> dict[str, Any]:
 
 
 if __name__ == "__main__":
-    print("modelforge-workers: no queue consumer yet (see docs/PROGRESS.md Day 10+).")
+    import os
+
+    from .consumer import run_forever
+
+    queue_url = os.environ.get("MF_SYSTEM_JOBS_QUEUE_URL")
+    if not queue_url:
+        print("modelforge-workers: MF_SYSTEM_JOBS_QUEUE_URL not set, nothing to consume yet.")
+    else:
+        run_forever(queue_url)
 

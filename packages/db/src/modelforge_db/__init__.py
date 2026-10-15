@@ -10,6 +10,7 @@ from .records import (
     JobEventRecord,
     JobRecord,
     ModelRecord,
+    UploadRecord,
     UsageRecord,
     UserRecord,
 )
@@ -17,6 +18,7 @@ from .repositories.datasets import DatasetRepository
 from .repositories.job_events import JobEventRepository
 from .repositories.jobs import JobRepository
 from .repositories.models import ModelRepository
+from .repositories.uploads import UploadRepository
 from .repositories.usage import UsageRepository
 from .repositories.users import UserRepository
 
@@ -35,10 +37,12 @@ __all__ = [
     "JobRecord",
     "JobEventRecord",
     "UsageRecord",
+    "UploadRecord",
     "UserRepository",
     "ModelRepository",
     "DatasetRepository",
     "JobRepository",
     "JobEventRepository",
     "UsageRepository",
+    "UploadRepository",
 ]
