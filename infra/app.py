@@ -7,6 +7,7 @@ import os
 from aws_cdk import App, Environment
 
 from stacks.auth_stack import AuthStack
+from stacks.compute_stack import ComputeStack
 from stacks.queue_stack import QueueStack
 from stacks.storage_stack import StorageStack
 
@@ -35,10 +36,26 @@ AuthStack(
     env=Environment(account=account, region=region),
 )
 
-StorageStack(
-    app, "ModelForgeStorageStack-dev", env_name="dev", env=Environment(account=account, region=region)
+storage_stack = StorageStack(
+    app,
+    "ModelForgeStorageStack-dev",
+    env_name="dev",
+    env=Environment(account=account, region=region),
 )
 
-QueueStack(app, "ModelForgeQueueStack-dev", env=Environment(account=account, region=region))
+queue_stack = QueueStack(
+    app, "ModelForgeQueueStack-dev", env=Environment(account=account, region=region)
+)
+
+ComputeStack(
+    app,
+    "ModelForgeComputeStack-dev",
+    uploads_bucket_arn=storage_stack.uploads_bucket.bucket_arn,
+    results_bucket_arn=storage_stack.results_bucket.bucket_arn,
+    cpu_jobs_queue=queue_stack.cpu_jobs,
+    gpu_jobs_queue=queue_stack.gpu_jobs,
+    dispatcher_code_path="lambda/dispatcher",
+    env=Environment(account=account, region=region),
+)
 
 app.synth()

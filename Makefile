@@ -1,4 +1,4 @@
-.PHONY: up down api web worker test lint shot shot-stories shot-authed storybook types e2e lhci
+.PHONY: up down api web worker test lint shot shot-stories shot-authed storybook types e2e e2e-jobs lhci
 
 up:
 	docker compose up -d
@@ -49,6 +49,11 @@ shot-authed:
 
 e2e:
 	npm run test:e2e --prefix apps/web
+
+# Requires `make up` (LocalStack) first, and catalog/db/api/workers/dispatcher all
+# installed editable into the same environment (see infra/lambda/dispatcher/pyproject.toml).
+e2e-jobs:
+	cd workers && python -m pytest tests/test_e2e_quantize.py -v
 
 lhci:
 	npm run lhci --prefix apps/web

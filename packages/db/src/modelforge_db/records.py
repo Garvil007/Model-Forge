@@ -84,6 +84,8 @@ class JobRecord:
     created_at: str
     updated_at: str
     ttl: int
+    batch_job_id: str | None = None
+    retry_count: int = 0
 
 
 @dataclass(frozen=True)

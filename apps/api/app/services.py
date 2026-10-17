@@ -10,15 +10,19 @@ from __future__ import annotations
 import re
 import unicodedata
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
+from modelforge_catalog import OPERATIONS, stages_for_operation
 from modelforge_catalog.plans import PlanLimits, limits_for
-from modelforge_catalog.system_jobs import SystemJobKind, build_message
+from modelforge_catalog.system_jobs import SystemJobKind
+from modelforge_catalog.system_jobs import build_message as build_system_job_message
 from modelforge_catalog.uploads import classify_extension
-from modelforge_db.records import ModelRecord
+from modelforge_db.records import JobEventRecord, JobRecord, ModelRecord
 
 from .aws import get_s3_client, get_sqs_client
 from .config import Settings
+
+_OPERATIONS_BY_ID = {op.id: op for op in OPERATIONS}
 
 MIN_S3_PART_BYTES = 5 * 1024 * 1024
 MAX_S3_PARTS = 10_000
@@ -136,6 +140,15 @@ class StorageService:
     def delete(self, key: str) -> None:
         self._s3.delete_object(Bucket=self._settings.uploads_bucket, Key=key)
 
+    def presign_download(self, bucket: str, key: str, *, expires_in: int) -> str:
+        return str(
+            self._s3.generate_presigned_url(
+                "get_object",
+                Params={"Bucket": bucket, "Key": key},
+                ExpiresIn=expires_in,
+            )
+        )
+
 
 class JobQueueService:
     def __init__(self, settings: Settings) -> None:
@@ -145,8 +158,16 @@ class JobQueueService:
     def enqueue(self, kind: SystemJobKind, *, user_id: str, model_id: str) -> None:
         self._sqs.send_message(
             QueueUrl=self._settings.system_jobs_queue_url,
-            MessageBody=build_message(kind, user_id=user_id, model_id=model_id),
+            MessageBody=build_system_job_message(kind, user_id=user_id, model_id=model_id),
         )
+
+    def enqueue_job(self, message: str, *, queue: Literal["cpu", "gpu"]) -> None:
+        queue_url = (
+            self._settings.cpu_jobs_queue_url
+            if queue == "cpu"
+            else self._settings.gpu_jobs_queue_url
+        )
+        self._sqs.send_message(QueueUrl=queue_url, MessageBody=message)
 
 
 def serialize_model(record: ModelRecord) -> dict[str, Any]:
@@ -167,4 +188,59 @@ def serialize_model(record: ModelRecord) -> dict[str, Any]:
         "createdAt": record.created_at,
         "status": record.status,
         "detectionError": details.get("detectionError"),
+    }
+
+
+def _stage_dicts(record: JobRecord, events: list[JobEventRecord]) -> list[dict[str, Any]]:
+    """Reconstruct ApiJob's `stages: JobStage[]` from the operation's stage list plus the
+    events actually written so far — the real-job equivalent of the mock's time-driven
+    `buildStages`, but driven by what the worker reported."""
+    operation = _OPERATIONS_BY_ID.get(record.operation_id)
+    if operation is None:
+        return []
+    defs = stages_for_operation(operation, record.params)
+
+    event_counts_by_stage: dict[str, int] = {}
+    last_matched_index: int | None = None
+    for event in events:
+        for index, stage_def in enumerate(defs):
+            if stage_def.label == event.stage:
+                event_counts_by_stage[stage_def.label] = (
+                    event_counts_by_stage.get(stage_def.label, 0) + 1
+                )
+                if last_matched_index is None or index >= last_matched_index:
+                    last_matched_index = index
+                break
+
+    terminal_done = record.status == "succeeded"
+    stages: list[dict[str, Any]] = []
+    for index, stage_def in enumerate(defs):
+        if last_matched_index is None:
+            stage_status = "pending"
+        elif index < last_matched_index or (index == last_matched_index and terminal_done):
+            stage_status = "done"
+        elif index == last_matched_index:
+            stage_status = "active"
+        else:
+            stage_status = "pending"
+
+        stage: dict[str, Any] = {"label": stage_def.label, "status": stage_status}
+        if stage_def.epochs is not None:
+            stage["totalEpochs"] = stage_def.epochs
+            stage["epoch"] = min(event_counts_by_stage.get(stage_def.label, 0), stage_def.epochs)
+        stages.append(stage)
+    return stages
+
+
+def serialize_job(record: JobRecord, events: list[JobEventRecord]) -> dict[str, Any]:
+    return {
+        "id": record.job_id,
+        "modelId": record.model_id,
+        "operationId": record.operation_id,
+        "values": record.params,
+        "status": record.status,
+        "stages": _stage_dicts(record, events),
+        "createdAt": record.created_at,
+        "result": record.result,
+        "error": record.error,
     }

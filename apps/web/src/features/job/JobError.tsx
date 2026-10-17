@@ -18,6 +18,7 @@ const TITLES: Record<JobErrorInfo['code'], string> = {
   gated_model: 'Model access required',
   quota_exceeded: "You've used your quota",
   spot_interrupted: 'Instance interrupted',
+  timeout: 'Job timed out',
   unknown: 'Something went wrong',
 }
 

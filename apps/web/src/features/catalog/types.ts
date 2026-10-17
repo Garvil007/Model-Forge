@@ -25,7 +25,12 @@ export type ParamValue = string | number | boolean | null | undefined
 /** Current param values for one operation, keyed by param name. */
 export type ParamValues = Record<string, ParamValue>
 
-export const CATALOG = catalogJson as Catalog
+export let CATALOG = catalogJson as Catalog
+
+/** Replaces the catalog data at runtime, once the real GET /catalog response has loaded. */
+export function setCatalog(catalog: Catalog): void {
+  CATALOG = catalog
+}
 
 export function getTechniques(): Technique[] {
   return CATALOG.techniques

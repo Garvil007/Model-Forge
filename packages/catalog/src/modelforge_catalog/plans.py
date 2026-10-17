@@ -13,13 +13,22 @@ class PlanLimits:
     max_dataset_bytes: int
     retention_days: int
     retention_tag: str
+    max_concurrent_jobs: int
 
 
 _FREE = PlanLimits(
-    max_model_bytes=2 * _GIB, max_dataset_bytes=2 * _GIB, retention_days=7, retention_tag="7d"
+    max_model_bytes=2 * _GIB,
+    max_dataset_bytes=2 * _GIB,
+    retention_days=7,
+    retention_tag="7d",
+    max_concurrent_jobs=2,
 )
 _PAID = PlanLimits(
-    max_model_bytes=5 * _GIB, max_dataset_bytes=5 * _GIB, retention_days=30, retention_tag="30d"
+    max_model_bytes=5 * _GIB,
+    max_dataset_bytes=5 * _GIB,
+    retention_days=30,
+    retention_tag="30d",
+    max_concurrent_jobs=10,
 )
 
 PLAN_LIMITS: dict[str, PlanLimits] = {"free": _FREE, "pro": _PAID, "team": _PAID}

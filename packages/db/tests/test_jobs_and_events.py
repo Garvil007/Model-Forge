@@ -19,6 +19,8 @@ def test_create_and_get_job(table: Any) -> None:
     assert fetched == created
     assert fetched.status == "queued"
     assert fetched.progress_percent == 0
+    assert fetched.batch_job_id is None
+    assert fetched.retry_count == 0
 
 
 def test_update_progress_sets_status_result_and_error(table: Any) -> None:
@@ -62,6 +64,40 @@ def test_list_for_user_returns_newest_first(table: Any) -> None:
     listed = repo.list_for_user(user_id)
 
     assert [job.job_id for job in listed] == [second.job_id, first.job_id]
+
+
+def test_set_batch_job_id(table: Any) -> None:
+    repo = JobRepository(table)
+    user_id = unique_id()
+    created = repo.create(user_id, operation_id="op.a", params={}, queue="cpu")
+
+    updated = repo.set_batch_job_id(user_id, created.job_id, "batch-job-123")
+
+    assert updated.batch_job_id == "batch-job-123"
+    assert repo.get(user_id, created.job_id).batch_job_id == "batch-job-123"
+
+
+def test_increment_retry_count(table: Any) -> None:
+    repo = JobRepository(table)
+    user_id = unique_id()
+    created = repo.create(user_id, operation_id="op.a", params={}, queue="cpu")
+
+    once = repo.increment_retry_count(user_id, created.job_id)
+    twice = repo.increment_retry_count(user_id, created.job_id)
+
+    assert once.retry_count == 1
+    assert twice.retry_count == 2
+
+
+def test_increment_retry_count_on_missing_job_raises_not_found(table: Any) -> None:
+    repo = JobRepository(table)
+
+    try:
+        repo.increment_retry_count(unique_id(), unique_id())
+    except NotFoundError:
+        pass
+    else:
+        raise AssertionError("expected NotFoundError")
 
 
 def test_job_events_append_and_list_in_order(table: Any) -> None:

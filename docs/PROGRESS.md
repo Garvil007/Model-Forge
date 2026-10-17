@@ -217,7 +217,66 @@ Update at the end of every day. Check items off as "Done when" criteria pass.
       (the dependency list already omits them, but no test enforces it); subprocess-level
       sandboxing (timeout/memory limits) around detection parsing; `docs/decisions.md`,
       `FRONTEND.md` and `COSTS.md` entries for this day's design choices.
-- [ ] Day 10: Jobs, queues and progress — job runs queued → running → succeeded with live stages in the real UI; killing the worker mid-job causes a retry.
+- [ ] Day 10: Jobs, queues and progress — `GET /api/catalog` serves `packages/catalog` live;
+      `apps/web`'s `main.tsx` fetches it at bootstrap and calls the new `setCatalog()` instead of
+      the module ever reading only the bundled `generated/catalog.json` (that file stays as the
+      `make types` codegen source and the MSW/test fixture — `src/test/setup.ts` seeds it the
+      same way so all 387 existing web tests needed zero changes). `POST /api/jobs` validates
+      `values` against `build_param_schema(op)` (`jsonschema`), re-checks availability with a new
+      `modelforge_catalog.availability.check_availability` (a line-for-line port of the
+      frontend's `availability.ts`, since the API only ever sees model metadata, never the file
+      itself), enforces a new `PlanLimits.max_concurrent_jobs` (free 2, pro/team 10) against the
+      user's own queued/running jobs, then writes the job via the existing `JobRepository` and
+      sends a message — a new, deliberately separate `job_messages.py` schema, not
+      `system_jobs.py`'s — to `cpu-jobs` or `gpu-jobs` by the operation's `.queue`. Nothing reads
+      that queue until a job exists: idle app, idle compute, as intended.
+      A dispatcher Lambda (`infra/lambda/dispatcher/`) consumes `cpu-jobs`/`gpu-jobs`, re-checks
+      the job is still `queued` (skips a redelivered or already-canceled message rather than
+      double-submitting), and submits to AWS Batch through a `BatchJobClient` abstraction —
+      `RealBatchJobClient` (boto3) for prod, `LocalBatchJobClient` (runs the worker in-process)
+      for local dev/tests, since LocalStack Community has no Batch emulation at all. `workers/
+      core` actually executes a job now: idempotent dispatch (a terminal-status job is a no-op,
+      handling SQS at-least-once redelivery), downloads the model from S3, runs the operation,
+      uploads the result, writes a `JobEvent` per stage (stage labels come from a new
+      `job_stages.py`, ported from the mock's `jobStages.ts` and imported by both the API — to
+      reconstruct `JobStage[]` for `GET /api/jobs/{id}` — and the worker, so they can't drift), a
+      heartbeat touching `updated_at`, a configurable timeout (`MF_JOB_TIMEOUT_SECONDS`, default
+      7200) via a background-timer flag checked between stages, and a requeue-once-then-fail path
+      for a Spot interruption (shares the same "check a flag between stages" mechanism as
+      cancellation — a `JobControl.check()` call the op makes between its stages — differing only
+      in what sets the flag: DB status for cancel, a `SIGTERM` handler in prod, an env var hook
+      for local testing). Cleanup is `try/finally` over a `TemporaryDirectory`, always. Only one
+      operation has real logic end to end: **`q_int8_dyn`** (ONNX Runtime dynamic int8
+      quantization) — simplest stage list (3 flat stages, no calibration/epochs), pure Python, no
+      GPU. The other 22 catalog operations hit the dispatch table's clean `unsupported_operator`
+      failure, which is the deliberate extension point for Days 11+, not a bug.
+      `GET /api/jobs/{id}` assembles the exact `ApiJob` shape the Day 5 UI already polls for, so
+      the frontend needed no changes beyond one small contract addition: `JobErrorCode` gained a
+      `"timeout"` value (`JobError.tsx` + `types.ts`), since a 2-hour timeout had nowhere honest
+      to map before. `POST /api/jobs/{id}/cancel`: a `queued` job is dropped by the idempotency
+      check at dispatch time (there's no cheap way to pull a specific message back out of SQS);
+      a `running` job's status flips immediately and the worker notices between stages, plus
+      `BatchJobClient.terminate_job` if a `batch_job_id` was recorded. `GET /api/jobs/{id}/download`
+      returns a short-lived presigned S3 URL. `infra/stacks/compute_stack.py` is a new CDK stack
+      (Fargate Spot compute environment, cpu/gpu job definitions, the dispatcher Lambda wired to
+      both queues via an SQS event source) — `cdk synth`-tested, not deployed; worker container
+      images are still placeholders (`busybox`) pending Day 11's real images, and there's no CDK
+      DynamoDB table stack yet (the table is LocalStack-only via `init-aws.sh`), so the dispatcher's
+      IAM policy scopes to a hardcoded table name as a documented gap.
+      **Not run live in this session:** same Docker Desktop limitation as Days 1 and 9 — `make
+      e2e-jobs` (the full chain: real `POST /jobs` → SQS → dispatcher → in-process worker → real
+      `onnxruntime` quantization of a tiny generated ONNX model → `GET /jobs/{id}` →
+      presigned-download) was written, is skip-gated the same way `packages/db`'s LocalStack
+      tests are, and collects/skips cleanly, but has never actually executed against live
+      LocalStack. Someone with Docker should run `make up && make e2e-jobs` before trusting this
+      slice; a known possible gap flagged during implementation is that `StorageService
+      .presign_download` may need a LocalStack public-endpoint override to be reachable from
+      outside the LocalStack container network — unverified either way. Every other layer's own
+      unit/integration tests did run and pass (`packages/catalog`, `packages/db`, `apps/api`,
+      `workers`, `infra`, and all 387 `apps/web` tests plus a clean `tsc --noEmit`).
+      **Also noted, not fixed (pre-existing, out of scope):** `system_jobs.py`'s `build_message`/
+      `parse_message` round-trip has a key-case mismatch bug; the new `job_messages.py` added for
+      real jobs deliberately avoided repeating it rather than fixing the older file.
 - [ ] Day 11: Worker images and the first quantization methods — every method in this batch passes a round-trip test, real output size near the catalog estimate.
 - [ ] Day 12: INT8 static and real accuracy — INT8 static run on a real small classifier reports believable accuracy before and after.
 - [ ] Day 13: Conversions — every conversion visible in the interface works, or is correctly hidden for that format.

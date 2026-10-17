@@ -117,6 +117,38 @@ class JobRepository:
             raise
         return _to_record(response["Attributes"])
 
+    def set_batch_job_id(self, user_id: str, job_id: str, batch_job_id: str) -> JobRecord:
+        try:
+            response = self._table.update_item(
+                Key={"PK": user_pk(user_id), "SK": job_sk(job_id)},
+                UpdateExpression="SET batchJobId = :batchJobId",
+                ConditionExpression="attribute_exists(PK)",
+                ExpressionAttributeValues={":batchJobId": batch_job_id},
+                ReturnValues="ALL_NEW",
+            )
+        except ClientError as error_:
+            raise_not_found_on_condition_failure(
+                error_, f"job {job_id!r} not found for user {user_id!r}"
+            )
+            raise
+        return _to_record(response["Attributes"])
+
+    def increment_retry_count(self, user_id: str, job_id: str) -> JobRecord:
+        try:
+            response = self._table.update_item(
+                Key={"PK": user_pk(user_id), "SK": job_sk(job_id)},
+                UpdateExpression="SET retryCount = if_not_exists(retryCount, :zero) + :one",
+                ConditionExpression="attribute_exists(PK)",
+                ExpressionAttributeValues={":zero": 0, ":one": 1},
+                ReturnValues="ALL_NEW",
+            )
+        except ClientError as error_:
+            raise_not_found_on_condition_failure(
+                error_, f"job {job_id!r} not found for user {user_id!r}"
+            )
+            raise
+        return _to_record(response["Attributes"])
+
 
 def _to_record(item: dict[str, Any]) -> JobRecord:
     return JobRecord(
@@ -137,4 +169,6 @@ def _to_record(item: dict[str, Any]) -> JobRecord:
         created_at=item["createdAt"],
         updated_at=item["updatedAt"],
         ttl=int(item["ttl"]),
+        batch_job_id=item.get("batchJobId"),
+        retry_count=int(item.get("retryCount", 0)),
     )

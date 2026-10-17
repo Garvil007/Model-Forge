@@ -27,7 +27,10 @@ class Settings(BaseSettings):
     uploads_bucket: str = "mf-uploads"
     results_bucket: str = "mf-results"
     system_jobs_queue_url: str = ""
+    cpu_jobs_queue_url: str = ""
+    gpu_jobs_queue_url: str = ""
     presign_expiry_seconds: int = 6 * 3600
+    download_presign_expiry_seconds: int = 300
     upload_part_size_bytes: int = 100 * 1024 * 1024
     hf_timeout_seconds: float = 15.0
     hf_token_kms_key_id: str = "alias/modelforge-hf-tokens"

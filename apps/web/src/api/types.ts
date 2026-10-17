@@ -86,6 +86,7 @@ export type JobErrorCode =
   | 'gated_model'
   | 'quota_exceeded'
   | 'spot_interrupted'
+  | 'timeout'
   | 'unknown'
 
 export interface JobErrorInfo {
