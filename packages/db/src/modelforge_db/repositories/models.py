@@ -51,7 +51,7 @@ class ModelRepository:
             "sizeBytes": size_bytes,
             "format": format,
             "family": family,
-            "bits": bits,
+            "bits": decimalize(bits),
             "paramCount": param_count,
             "details": decimalize(details or {}),
             "status": status,

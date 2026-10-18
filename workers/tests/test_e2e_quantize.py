@@ -66,12 +66,12 @@ def _tiny_onnx_bytes() -> bytes:
 @pytest.fixture(scope="module")
 def localstack_or_skip() -> None:
     client = boto3.client(
-        "sts",
+        "s3",
         endpoint_url=_ENDPOINT,
         region_name=os.environ["MF_AWS_REGION"],
     )
     try:
-        client.get_caller_identity()
+        client.list_buckets()
     except (EndpointConnectionError, ClientError) as error:
         pytest.skip(f"LocalStack not reachable at {_ENDPOINT}: {error}")
 

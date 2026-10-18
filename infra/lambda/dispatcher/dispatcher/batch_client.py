@@ -1,7 +1,7 @@
 """AWS Batch submission, abstracted so local dev/tests don't need real Batch.
 
 LocalStack Community has no Batch emulation, so `LocalBatchJobClient` runs the worker
-in-process via `workers.core.consumer.handle_job_message` instead of actually submitting
+in-process via `core.consumer.handle_job_message` instead of actually submitting
 anywhere — it exercises the real worker code path (S3, quantize op, DynamoDB writes) with
 only the "is it containerized" layer stubbed out. `RealBatchJobClient` is the prod boto3
 implementation, used once a real Batch compute environment is deployed.
@@ -60,7 +60,7 @@ class LocalBatchJobClient:
 
     `job_definition`/`queue` are meaningless without real Batch, so this implementation
     ignores them and instead requires `message_body` (the original SQS message) to hand
-    straight to `workers.core.consumer.handle_job_message`, running the real worker
+    straight to `core.consumer.handle_job_message`, running the real worker
     synchronously in this process. This exercises the actual worker code (S3 download,
     the op, DynamoDB writes) with only the "runs in a container on Batch" layer stubbed.
 
@@ -73,7 +73,7 @@ class LocalBatchJobClient:
     def submit_job(
         self, job_id: str, job_definition: str, queue: str, *, message_body: str | None = None
     ) -> str:
-        from workers.core import consumer
+        from core import consumer
 
         if message_body is None:
             raise ValueError("LocalBatchJobClient.submit_job requires message_body")
