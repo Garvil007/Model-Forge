@@ -71,6 +71,7 @@ METHODS: tuple[OperationSpec, ...] = (
         required_bit_width=32,
         size_estimate=lambda m, v: m.size * 16 / m.bits,
         impact_estimate=lambda m, v: 0.05,
+        worker_image="cpu-torch",
     ),
     OperationSpec(
         id="q_bf16",
@@ -86,6 +87,7 @@ METHODS: tuple[OperationSpec, ...] = (
         required_bit_width=32,
         size_estimate=lambda m, v: m.size * 16 / m.bits,
         impact_estimate=lambda m, v: 0.08,
+        worker_image="cpu-torch",
     ),
     OperationSpec(
         id="q_int8_dyn",
@@ -101,6 +103,7 @@ METHODS: tuple[OperationSpec, ...] = (
         source_formats=("onnx", "torch", "torchscript", "keras"),
         size_estimate=lambda m, v: m.size * 8.2 / m.bits,
         impact_estimate=lambda m, v: 1.1 if m.family == "vision" else 0.5,
+        worker_image="cpu-torch",
     ),
     OperationSpec(
         id="q_int8_static",

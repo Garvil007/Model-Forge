@@ -68,8 +68,16 @@ def _quantize_dynamic_op(**kwargs: Any) -> None:
     quantize_dynamic.run(**kwargs)
 
 
+def _fp_cast_op(**kwargs: Any) -> None:
+    from ops import fp_cast
+
+    fp_cast.run(**kwargs)
+
+
 _OPS_BY_OPERATION_ID: dict[str, OpFunction] = {
     "q_int8_dyn": _quantize_dynamic_op,
+    "q_fp16": _fp_cast_op,
+    "q_bf16": _fp_cast_op,
 }
 
 

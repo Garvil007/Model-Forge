@@ -277,7 +277,81 @@ Update at the end of every day. Check items off as "Done when" criteria pass.
       **Also noted, not fixed (pre-existing, out of scope):** `system_jobs.py`'s `build_message`/
       `parse_message` round-trip has a key-case mismatch bug; the new `job_messages.py` added for
       real jobs deliberately avoided repeating it rather than fixing the older file.
-- [ ] Day 11: Worker images and the first quantization methods — every method in this batch passes a round-trip test, real output size near the catalog estimate.
+- [x] Day 11: Worker images and the first quantization methods — every method in this batch
+      passes a round-trip test (reloads in its target runtime), real output size checked
+      against the catalog's estimate. Two new images under `workers/images/` (multi-stage
+      Dockerfiles + a pinned `requirements.lock.txt` each, slim `python:3.12-slim` final
+      layer, non-root user): **cpu-torch** (PyTorch CPU, ONNX, ONNX Runtime,
+      onnxconverter-common, safetensors, Ultralytics) and **cpu-tf** (TensorFlow, tf2onnx,
+      onnx2tf). `workers/pyproject.toml` gained matching `torch-ops`/`tf-ops` optional-dep
+      extras — torch and tensorflow stay out of the base `modelforge-workers` install (see
+      `ops/detect.py`'s docstring on why detection never touches them), but `dev` now pulls
+      both in so the full suite runs locally.
+      Two new ops, each dispatching per source-model format rather than one tool fits all:
+      `ops/fp_cast.py` (**q_fp16**/**q_bf16**) casts weights to half precision — ONNX via
+      `onnxconverter_common.float16` (fp16 only), PyTorch `torch` (state_dict, via
+      `torch.load(weights_only=True)` and a recursive tensor-tree cast — fp16 and bf16),
+      PyTorch `torchscript` (`.half()` on the loaded `ScriptModule` — fp16 only), Keras
+      (rewrites float32 HDF5 datasets to float16 directly with `h5py`, no TensorFlow
+      needed to produce the result — fp16 only), and `safetensors` (`safetensors.torch`,
+      fp16 and bf16). `ops/quantize_dynamic.py` (**q_int8_dyn**) now dispatches ONNX to
+      `onnxruntime.quantization.quantize_dynamic` (unchanged from Day 10), PyTorch
+      `torchscript` to `torch.ao.quantization.quantize_jit.quantize_dynamic_jit` — the
+      *actual* graph-rewriting API; `torch.quantization.quantize_dynamic` turned out to be
+      a silent no-op on an already-scripted/traced module (its children are
+      `RecursiveScriptModule` wrappers, never `isinstance(..., nn.Linear)`, so the
+      eager-mode type-swap never matches — caught by inspecting the reloaded graph in a
+      test, not by any exception), and Keras to `tf.lite.TFLiteConverter` with
+      `optimizations=[tf.lite.Optimize.DEFAULT]` — TensorFlow has no in-place
+      weights-only dynamic quantizer the way ONNX Runtime and PyTorch do, so this *is*
+      "INT8 dynamic" for a Keras source, and the result format changes to `.tflite`
+      accordingly. A bare PyTorch `torch` (state_dict) source is refused with
+      `unsupported_operator` for `q_int8_dyn` specifically — dynamic quantization needs a
+      module to replace layers on, and a state_dict has no architecture; FP16/BF16 don't
+      have this problem since casting dtype element-wise needs no architecture at all.
+      `core/similarity.py` is the shared output-similarity check (cosine similarity,
+      largest absolute difference, top-1 agreement via argmax, with NCHW/NHWC alignment
+      before comparing) — used wherever an op can actually execute both the original and
+      the result (ONNX, Keras, Keras's TFLite output). Where it can't (a bare state_dict,
+      raw safetensors, a TorchScript graph whose serialized form has no static input shape
+      to replay after a save/load round-trip — verified empirically, not assumed) it
+      reports "not measured (reason)" rather than guessing. 48 worker tests pass
+      (`test_fp_cast.py`, `test_similarity.py`, extended `test_quantize_dynamic.py`), each
+      building its tiny model inside the test (ONNX via `onnx.helper`, PyTorch via a real
+      `nn.Linear`, Keras via `tf.keras.Sequential`, safetensors via
+      `safetensors.torch.save_file`) and reloading the real output in its target runtime
+      (`onnxruntime.InferenceSession`, `torch.jit.load`/`torch.load(weights_only=True)`,
+      `tf.lite.Interpreter`, `safetensors.torch.load_file`) — not just checking bytes
+      changed. Every test also checks the real output size against
+      `OperationSpec.size_estimate(ModelInfo, {})` within a loose 0.1x-10x band (a
+      hand-built matrix is nowhere near the smooth-scaling regime those formulas assume;
+      the formulas are tuned against real models, not a 64x64 test fixture) — nothing came
+      back far enough off to flag.
+      **Known gaps, left for a follow-up:** `infra/stacks/compute_stack.py`'s
+      `_WORKER_IMAGES` still only has `cpu-base`/`gpu-base` with the Day 10 placeholder
+      busybox image — wiring real `cpu-torch`/`cpu-tf` job definitions (and an ECR push)
+      is Day 11+ infra work, not done here. Neither image was actually built or run with
+      Docker (same Docker Desktop limitation noted on Days 1, 9 and 10) — both Dockerfiles
+      are written and reviewed, and every package they install was verified by installing
+      it directly into this environment's venv and running the real test suite against it,
+      but `docker build` itself hasn't been exercised. `q_fp16`'s `yolo` source format
+      (declared in the catalog, matching the prototype) has no caster yet — a job for it
+      hits the same clean `unsupported_operator` "no worker implementation" message other
+      not-yet-built operations already use. TorchScript's "not measured" similarity result
+      is a deliberate scope decision, not a missing feature: a serialized TorchScript
+      graph's input `TensorType.sizes()` comes back `None` after a save/load round-trip
+      (checked directly, not assumed), so there's no honest way to synthesize a matching
+      input without the model's declared shape.
+      **Security, flagged by automated review, partly addressed:** `tf.keras.models.load_model`
+      now passes `safe_mode=True, compile=False` (rejects Lambda-layer/arbitrary-callable
+      configs, skips optimizer deserialization) and the PyTorch state_dict path already
+      used `torch.load(..., weights_only=True)`. What's *not* addressed here, because it's
+      an `infra/` concern, not something a worker op module can fix on its own: these jobs
+      still run with the worker's full IAM credentials and a credentialed boto3 client
+      rather than per-object pre-signed URLs, and there's no seccomp/gVisor sandbox around
+      `torch.jit.load` or `tf.keras.models.load_model` — both still parse untrusted bytes
+      from the user's uploaded file. Worth a dedicated pass before any of this touches
+      production traffic.
 - [ ] Day 12: INT8 static and real accuracy — INT8 static run on a real small classifier reports believable accuracy before and after.
 - [ ] Day 13: Conversions — every conversion visible in the interface works, or is correctly hidden for that format.
 - [ ] Day 14: LLM quantization — GGUF Q4_K_M of a small real model loads in llama.cpp; GPU methods pass CPU-mode tests.

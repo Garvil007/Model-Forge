@@ -1,0 +1,59 @@
+# Pinned, hash-free lock for the cpu-tf worker image: TensorFlow, tf2onnx, onnx2tf — plus
+# modelforge-workers' own base deps. Generated from a real resolved install
+# (`pip install -e workers[tf-ops] tf2onnx onnx2tf`) on 2026-10-18; regenerate with the
+# same command in a clean venv whenever a version here needs bumping, rather than
+# hand-editing one line at a time.
+
+# -- modelforge-workers base deps --
+boto3==1.43.114
+botocore==1.43.114
+s3transfer==0.19.2
+jmespath==1.1.0
+h5py==3.14.0
+onnx==1.20.1
+onnxruntime==1.26.0
+onnxconverter-common==1.16.0
+safetensors==0.8.0
+huggingface-hub==2.2.0
+hf-xet==1.7.0
+
+# -- tf-ops extra --
+tensorflow_cpu==2.21.0
+keras==3.15.1
+ml_dtypes==0.5.4
+absl-py==2.5.1
+astunparse==1.6.3
+gast==0.7.0
+google-pasta==0.2.0
+grpcio==1.84.0
+libclang==18.1.1
+opt_einsum==3.4.0
+optree==0.20.0
+termcolor==3.3.0
+wrapt==2.5.1
+namex==0.1.0
+ai-edge-litert==2.1.2
+
+# -- tf2onnx / onnx2tf --
+tf2onnx==1.17.0
+onnx2tf==2.6.9
+onnx-ir==1.0.0
+onnxoptimizer==0.4.2
+onnxscript==0.6.2
+onnxsim==0.6.5
+sng4onnx==2.0.1
+sne4onnx==2.0.1
+
+# -- shared transitive deps --
+numpy==2.2.6
+protobuf==7.35.1
+flatbuffers==25.12.19
+packaging==26.3
+typing_extensions==4.16.0
+requests==2.34.2
+urllib3==2.8.0
+certifi==2026.7.22
+charset-normalizer==3.5.2
+idna==3.20
+PyYAML==6.0.3
+six==1.17.0

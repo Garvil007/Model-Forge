@@ -12,16 +12,24 @@ dependencies = [
     "h5py>=3.11",
     "onnx>=1.16",
     "onnxruntime>=1.18",
+    "onnxconverter-common>=1.14",
+    "safetensors>=0.4",
     "huggingface-hub>=0.25",
 ]
 # modelforge-catalog and modelforge-db aren't on PyPI: install them editable alongside
 # this package (see Makefile / CI, which run
 # `pip install -e packages/catalog -e packages/db -e workers`).
-# Deliberately NOT a dependency: torch, tensorflow, keras, dill, joblib, or anything else
-# that can unpickle/execute code — see workers/ops/detect.py's module docstring.
+# torch and tensorflow are deliberately NOT base dependencies — `workers/ops/detect.py`'s
+# module docstring explains why detection never unpickles. The ops that actually run a
+# compression/conversion job on a trusted, already-detected model file need the real
+# framework though, so those live behind the `torch-ops`/`tf-ops` extras below, matching
+# the cpu-torch/cpu-tf images in `workers/images/`: each format's caster imports its
+# framework lazily, so an op module still imports fine on whichever image lacks the other.
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.11"]
+dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.11", "modelforge-workers[torch-ops,tf-ops]"]
+torch-ops = ["torch>=2.2"]
+tf-ops = ["tensorflow-cpu>=2.16; sys_platform != 'darwin'", "tensorflow>=2.16; sys_platform == 'darwin'"]
 
 [tool.setuptools.packages.find]
 where = ["."]

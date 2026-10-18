@@ -114,11 +114,11 @@ def test_run_job_rejects_unknown_operation_cleanly() -> None:
 
 
 def test_run_job_fails_cleanly_for_known_but_unimplemented_operation() -> None:
-    jobs = _FakeJobRepository(_job(operation_id="q_fp16"))
+    jobs = _FakeJobRepository(_job(operation_id="q_int8_static"))
     events = _FakeJobEventRepository()
 
     runner.run_job(
-        job_id="job-1", user_id="user-1", model_id="model-1", operation_id="q_fp16",
+        job_id="job-1", user_id="user-1", model_id="model-1", operation_id="q_int8_static",
         job_repo=jobs, event_repo=events,
     )
 

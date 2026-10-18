@@ -1,0 +1,70 @@
+# Pinned, hash-free lock for the cpu-torch worker image: PyTorch CPU, ONNX, ONNX Runtime,
+# onnxconverter-common, safetensors, Ultralytics — plus modelforge-workers' own base deps.
+# Generated from a real resolved install (`pip install -e workers[torch-ops]
+# ultralytics`) on 2026-10-18; regenerate with the same command in a clean venv whenever a
+# version here needs bumping, rather than hand-editing one line at a time.
+#
+# torch comes from the CPU-only wheel index — build with:
+#   pip install -r requirements.lock.txt --extra-index-url https://download.pytorch.org/whl/cpu
+
+# -- modelforge-workers base deps --
+boto3==1.43.114
+botocore==1.43.114
+s3transfer==0.19.2
+jmespath==1.1.0
+h5py==3.14.0
+onnx==1.20.1
+onnxruntime==1.26.0
+onnxconverter-common==1.16.0
+safetensors==0.8.0
+huggingface-hub==2.2.0
+hf-xet==1.7.0
+
+# -- torch-ops extra --
+torch==2.14.1+cpu
+sympy==1.14.0
+mpmath==1.3.0
+networkx==3.6.1
+Jinja2==3.1.6
+MarkupSafe==3.0.3
+
+# -- Ultralytics (YOLO) --
+ultralytics==8.4.182
+ultralytics-thop==2.2.2
+ultralytics-platform==0.1.90
+torchvision==0.29.1
+opencv-python==4.13.0.92
+pillow==13.0.0
+matplotlib==3.11.2
+contourpy==1.4.0
+cycler==0.12.1
+fonttools==4.67.0
+kiwisolver==1.5.1
+pyparsing==3.3.3
+polars==2.0.0
+polars-runtime-32==2.0.0
+psutil==5.9.5
+rich==15.0.0
+markdown-it-py==4.2.0
+mdurl==0.1.2
+Pygments==2.21.0
+nvidia-ml-py==13.615.71
+colorama==0.4.6
+
+# -- shared transitive deps --
+numpy==2.2.6
+protobuf==7.35.1
+flatbuffers==25.12.19
+packaging==26.3
+typing_extensions==4.16.0
+requests==2.34.2
+urllib3==2.8.0
+certifi==2026.7.22
+charset-normalizer==3.5.2
+idna==3.20
+PyYAML==6.0.3
+tqdm==4.67.1
+filelock==4.2.0
+fsspec==2026.9.0
+python-dateutil==2.9.0.post0
+six==1.17.0
