@@ -199,7 +199,7 @@ METHODS: tuple[OperationSpec, ...] = (
         size_estimate=lambda m, v: m.params * gguf_type(v["qtype"]).bits_per_weight / 8,
         impact_estimate=lambda m, v: gguf_type(v["qtype"]).perplexity_delta
         * (0.75 if v["imatrix"] else 1),
-        worker_image="gpu-base",
+        worker_image="cpu-llm",
     ),
     OperationSpec(
         id="q_gptq",
@@ -338,6 +338,8 @@ METHODS: tuple[OperationSpec, ...] = (
         ),
         size_estimate=lambda m, v: m.params * (4.13 if v["double"] else 4.5) / 8,
         impact_estimate=lambda m, v: 3.4,
+        worker_image="gpu-base",
+        queue="gpu",
     ),
     # ---------------- Pruning ----------------
     OperationSpec(

@@ -21,3 +21,19 @@ def test_q_int8_static_calib_param_help_mentions_dataset_id() -> None:
     calib = next(p for p in op.params if p.name == "calib")
     assert calib.type == "dataset"
     assert "dataset" in calib.help.lower()
+
+
+def test_q_gguf_runs_on_the_cpu_llm_worker_image() -> None:
+    # GGUF quantization is llama.cpp CPU work, not GPU — cheaper and fast enough, so it
+    # must not inherit the gpu-base image/queue the way q_gptq/q_awq do.
+    op = _method("q_gguf")
+    assert op.worker_image == "cpu-llm"
+    assert op.queue == "cpu"
+
+
+def test_q_nf4_runs_on_the_gpu_worker_image() -> None:
+    # Bug fix: q_nf4 (bitsandbytes) was missing worker_image/queue entirely, unlike its
+    # sibling q_gptq/q_awq which already declare worker_image="gpu-base", queue="gpu".
+    op = _method("q_nf4")
+    assert op.worker_image == "gpu-base"
+    assert op.queue == "gpu"

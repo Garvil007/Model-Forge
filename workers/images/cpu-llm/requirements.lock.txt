@@ -1,0 +1,62 @@
+# Pinned, hash-free lock for the cpu-llm worker image: everything convert_hf_to_gguf.py
+# needs to read an HF repo's weights generically (torch CPU, sentencepiece, protobuf,
+# the gguf Python package) plus huggingface-hub for the repo download, on top of
+# modelforge-workers' own base deps (same section every other image's lock carries).
+#
+# NOT YET regenerated from a real resolved install in this environment (no Docker daemon
+# here, same limitation `docs/PROGRESS.md`'s Day 1/9/10/11/12/13 entries already note for
+# every other image) — versions below are hand-pinned to match the sibling cpu-torch/
+# cpu-tf/cpu-convert locks' dates and ranges, not `pip`-resolved. Regenerate with
+# `pip install -e workers[llm-ops]` in a clean venv before trusting this file for a real
+# build, the same way those other locks were generated.
+#
+# torch comes from the CPU-only wheel index — build with:
+#   pip install -r requirements.lock.txt --extra-index-url https://download.pytorch.org/whl/cpu
+
+# -- modelforge-workers base deps --
+boto3==1.43.114
+botocore==1.43.114
+s3transfer==0.19.2
+jmespath==1.1.0
+h5py==3.14.0
+onnx==1.20.1
+onnxruntime==1.26.0
+onnxconverter-common==1.16.0
+safetensors==0.8.0
+huggingface-hub==2.2.0
+hf-xet==1.7.0
+pillow==13.0.0
+
+# -- validation-accuracy evaluators (text_cls/lm tokenizer) --
+transformers==5.20.1
+tokenizers==0.23.3
+regex==2026.9.29
+pycocotools==2.0.11
+
+# -- llm-ops extra: convert_hf_to_gguf.py's own requirements --
+torch==2.14.1+cpu
+sentencepiece==0.2.1
+protobuf==7.35.1
+gguf==0.11.0
+numpy==2.2.6
+sympy==1.14.0
+mpmath==1.3.0
+networkx==3.6.1
+Jinja2==3.1.6
+MarkupSafe==3.0.3
+
+# -- shared transitive deps --
+flatbuffers==25.12.19
+packaging==26.3
+typing_extensions==4.16.0
+requests==2.34.2
+urllib3==2.8.0
+certifi==2026.7.22
+charset-normalizer==3.5.2
+idna==3.20
+PyYAML==6.0.3
+tqdm==4.67.1
+filelock==4.2.0
+fsspec==2026.9.0
+python-dateutil==2.9.0.post0
+six==1.17.0

@@ -30,7 +30,10 @@ dependencies = [
 # framework lazily, so an op module still imports fine on whichever image lacks the other.
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.11", "modelforge-workers[torch-ops,tf-ops,convert-ops]"]
+dev = [
+    "pytest>=8", "ruff>=0.6", "mypy>=1.11",
+    "modelforge-workers[torch-ops,tf-ops,convert-ops,llm-ops,gpu-ops]",
+]
 torch-ops = ["torch>=2.2"]
 tf-ops = ["tensorflow-cpu>=2.16; sys_platform != 'darwin'", "tensorflow>=2.16; sys_platform == 'darwin'"]
 # The Convert tab (`convert_*.py`) needs both torch-ops and tf-ops plus format-conversion
@@ -51,6 +54,17 @@ convert-ops = [
     # optional Keras-2-compat package even though the rest of this image is Keras 3.
     "tf_keras>=2.21",
 ]
+# q_gguf/c_gguf (workers/ops/quantize_gguf.py, convert_gguf.py): llama.cpp's own
+# convert_hf_to_gguf.py needs torch + sentencepiece + protobuf + the gguf package to
+# read an HF repo's weights generically; the llama.cpp binaries themselves (llama-
+# quantize/llama-imatrix/llama-perplexity) are not pip-installable and come from the
+# cpu-llm image's own build step instead (workers/images/cpu-llm/Dockerfile).
+llm-ops = ["torch>=2.2", "sentencepiece>=0.2", "protobuf>=4.25", "gguf>=0.10"]
+# q_gptq/q_awq/q_nf4 (workers/ops/quantize_gptq.py, quantize_awq.py, quantize_nf4.py):
+# llm-compressor (GPTQ/AWQ), bitsandbytes (NF4), accelerate (device_map), datasets
+# (WikiText-2/C4 calibration). Installable and testable on CPU (MF_LLM_DEVICE=cpu) even
+# though the real gpu-base image runs these on CUDA — see _llm_gpu_common.py.
+gpu-ops = ["torch>=2.2", "llmcompressor>=0.3", "bitsandbytes>=0.45", "accelerate>=1.0", "datasets>=2.20"]
 
 [tool.setuptools.packages.find]
 where = ["."]

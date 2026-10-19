@@ -114,13 +114,14 @@ def test_run_job_rejects_unknown_operation_cleanly() -> None:
 
 
 def test_run_job_fails_cleanly_for_known_but_unimplemented_operation() -> None:
-    # q_gptq is declared in the catalog but has no worker implementation yet (q_int8_static,
-    # formerly this test's example, gained one in Phase 4 — see ops/quantize_static.py).
-    jobs = _FakeJobRepository(_job(operation_id="q_gptq"))
+    # c_tensorrt is declared in the catalog but has no worker implementation yet, pending
+    # Day 18 (q_int8_static and q_gptq, formerly this test's examples, each gained one —
+    # see ops/quantize_static.py and ops/quantize_gptq.py).
+    jobs = _FakeJobRepository(_job(operation_id="c_tensorrt"))
     events = _FakeJobEventRepository()
 
     runner.run_job(
-        job_id="job-1", user_id="user-1", model_id="model-1", operation_id="q_gptq",
+        job_id="job-1", user_id="user-1", model_id="model-1", operation_id="c_tensorrt",
         job_repo=jobs, event_repo=events,
     )
 

@@ -117,17 +117,52 @@ def _convert_openvino_op(**kwargs: Any) -> None:
     convert_openvino.run(**kwargs)
 
 
+def _convert_gguf_op(**kwargs: Any) -> None:
+    from ops import convert_gguf
+
+    convert_gguf.run(**kwargs)
+
+
+def _quantize_gguf_op(**kwargs: Any) -> None:
+    from ops import quantize_gguf
+
+    quantize_gguf.run(**kwargs)
+
+
+def _quantize_gptq_op(**kwargs: Any) -> None:
+    from ops import quantize_gptq
+
+    quantize_gptq.run(**kwargs)
+
+
+def _quantize_awq_op(**kwargs: Any) -> None:
+    from ops import quantize_awq
+
+    quantize_awq.run(**kwargs)
+
+
+def _quantize_nf4_op(**kwargs: Any) -> None:
+    from ops import quantize_nf4
+
+    quantize_nf4.run(**kwargs)
+
+
 _OPS_BY_OPERATION_ID: dict[str, OpFunction] = {
     "q_int8_dyn": _quantize_dynamic_op,
     "q_fp16": _fp_cast_op,
     "q_bf16": _fp_cast_op,
     "q_int8_static": _quantize_static_op,
+    "q_gguf": _quantize_gguf_op,
+    "q_gptq": _quantize_gptq_op,
+    "q_awq": _quantize_awq_op,
+    "q_nf4": _quantize_nf4_op,
     "c_onnx": _convert_onnx_op,
     "c_tflite": _convert_tflite_op,
     "c_torchscript": _convert_torchscript_op,
     "c_savedmodel": _convert_savedmodel_op,
     "c_safetensors": _convert_safetensors_op,
     "c_openvino": _convert_openvino_op,
+    "c_gguf": _convert_gguf_op,
 }
 
 

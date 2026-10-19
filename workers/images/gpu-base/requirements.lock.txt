@@ -1,0 +1,63 @@
+# Pinned, hash-free lock for the gpu-base worker image: CUDA PyTorch, Transformers,
+# llm-compressor (GPTQModifier/AWQModifier), bitsandbytes (NF4), accelerate, datasets
+# (WikiText-2/C4 calibration), plus modelforge-workers' own base deps.
+#
+# NOT YET regenerated from a real resolved install (no Docker daemon, no GPU, in this
+# environment — same limitation every other image's lock file documents). Versions are
+# hand-pinned to match the sibling images' dates/ranges, not `pip`-resolved. Regenerate
+# with `pip install -e workers[gpu-ops]` on a CUDA-capable machine before trusting this
+# file for a real build.
+#
+# torch comes from the CUDA 12.4 wheel index — build with:
+#   pip install -r requirements.lock.txt --extra-index-url https://download.pytorch.org/whl/cu124
+
+# -- modelforge-workers base deps --
+boto3==1.43.114
+botocore==1.43.114
+s3transfer==0.19.2
+jmespath==1.1.0
+h5py==3.14.0
+onnx==1.20.1
+onnxruntime==1.26.0
+onnxconverter-common==1.16.0
+safetensors==0.8.0
+huggingface-hub==2.2.0
+hf-xet==1.7.0
+pillow==13.0.0
+pycocotools==2.0.11
+
+# -- gpu-ops extra --
+torch==2.14.1
+transformers==5.20.1
+tokenizers==0.23.3
+regex==2026.9.29
+accelerate==1.12.0
+datasets==4.5.0
+dill==0.3.9
+multiprocess==0.70.17
+xxhash==3.5.0
+pyarrow==19.0.1
+llmcompressor==0.4.0
+bitsandbytes==0.46.0
+sympy==1.14.0
+mpmath==1.3.0
+networkx==3.6.1
+Jinja2==3.1.6
+MarkupSafe==3.0.3
+
+# -- shared transitive deps --
+numpy==2.2.6
+flatbuffers==25.12.19
+packaging==26.3
+typing_extensions==4.16.0
+requests==2.34.2
+urllib3==2.8.0
+certifi==2026.7.22
+charset-normalizer==3.5.2
+idna==3.20
+PyYAML==6.0.3
+tqdm==4.67.1
+filelock==4.2.0
+fsspec==2026.9.0
+python-dateutil==2.9.0.post0
+six==1.17.0

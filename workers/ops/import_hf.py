@@ -14,6 +14,7 @@ from typing import Any
 
 import boto3
 from huggingface_hub import hf_hub_download
+from huggingface_hub.utils import GatedRepoError, RepositoryNotFoundError
 from modelforge_db.encryption import KmsEncryptor
 from modelforge_db.exceptions import NotFoundError
 from modelforge_db.repositories.models import ModelRepository
@@ -84,6 +85,16 @@ def handle_import_hf(*, user_id: str, model_id: str) -> None:
             result = sniff_and_detect(probe, total_size, None)
         except DetectionError as error:
             models.mark_failed(user_id, model_id, code=error.code, message=str(error))
+            return
+        except (GatedRepoError, RepositoryNotFoundError) as error:
+            models.mark_failed(
+                user_id, model_id, code="gated_model",
+                message=(
+                    f"your Hugging Face token doesn't have access to {repo_id!r} — accept "
+                    "the model's license on huggingface.co, then attach a valid token for "
+                    f"that account: {error}"
+                ),
+            )
             return
         except Exception as error:  # noqa: BLE001 — download/network failures are terminal here
             models.mark_failed(user_id, model_id, code="hf_download_failed", message=str(error))

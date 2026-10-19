@@ -113,6 +113,7 @@ CONVERTS: tuple[OperationSpec, ...] = (
         ),
         size_estimate=lambda m, v: m.size
         * ({"f32": 32, "f16": 16, "bf16": 16, "q8_0": 8.5}[v["outtype"]] / m.bits),
+        worker_image="cpu-llm",
     ),
     OperationSpec(
         id="c_openvino",
