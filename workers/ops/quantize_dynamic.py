@@ -44,6 +44,7 @@ from modelforge_db.repositories.job_events import JobEventRepository
 from modelforge_db.repositories.jobs import JobRepository
 from modelforge_db.repositories.models import ModelRepository
 
+from core import evaluation
 from core.exceptions import JobCanceledError, JobTimeoutError, SpotInterruptedError
 from core.similarity import compare_runs
 
@@ -98,7 +99,9 @@ def _onnx_synthetic_input(session: Any) -> dict[str, np.ndarray] | None:
     return feeds or None
 
 
-def _quantize_onnx(path_in: Path, path_out: Path) -> tuple[dict[str, str], str | None]:
+def _quantize_onnx(
+    path_in: Path, path_out: Path
+) -> tuple[Callable[[], dict[str, str]], str | None]:
     import onnxruntime
     from onnxruntime.quantization import QuantType, quantize_dynamic
 
@@ -108,21 +111,26 @@ def _quantize_onnx(path_in: Path, path_out: Path) -> tuple[dict[str, str], str |
 
     original_session = onnxruntime.InferenceSession(str(path_in))
     result_session = onnxruntime.InferenceSession(str(path_out))
-    feeds = _onnx_synthetic_input(original_session)
-    if feeds is None:
-        return _not_measured("unsupported input shape"), None
-    metrics = compare_runs(
-        lambda f: original_session.run(None, f),
-        lambda f: result_session.run(None, f),
-        feeds,
-    )
-    return metrics, None
+
+    def _fallback() -> dict[str, str]:
+        feeds = _onnx_synthetic_input(original_session)
+        if feeds is None:
+            return _not_measured("unsupported input shape")
+        return compare_runs(
+            lambda f: original_session.run(None, f),
+            lambda f: result_session.run(None, f),
+            feeds,
+        )
+
+    return _fallback, None
 
 
 # ------------------------------------------------------------------------------ PyTorch
 
 
-def _quantize_torchscript(path_in: Path, path_out: Path) -> tuple[dict[str, str], str | None]:
+def _quantize_torchscript(
+    path_in: Path, path_out: Path
+) -> tuple[Callable[[], dict[str, str]], str | None]:
     # `torch.quantization.quantize_dynamic` only swaps modules by Python type and is a
     # silent no-op on an already-scripted/traced graph (its children are
     # `RecursiveScriptModule` wrappers, never `isinstance(..., nn.Linear)`). The JIT-level
@@ -136,10 +144,12 @@ def _quantize_torchscript(path_in: Path, path_out: Path) -> tuple[dict[str, str]
     quantized = quantize_dynamic_jit(module, {"": per_channel_dynamic_qconfig})
     torch.jit.save(quantized, str(path_out))
     reason = "a serialized TorchScript graph has no static input shape to replay"
-    return _not_measured(reason), None
+    return lambda: _not_measured(reason), None
 
 
-def _quantize_torch_statedict(path_in: Path, path_out: Path) -> tuple[dict[str, str], str | None]:
+def _quantize_torch_statedict(
+    path_in: Path, path_out: Path
+) -> tuple[Callable[[], dict[str, str]], str | None]:
     raise UnsupportedFormatError(
         "INT8 dynamic quantization needs a runnable module (TorchScript); a bare "
         "PyTorch state_dict has no architecture to quantize against"
@@ -156,7 +166,9 @@ def _keras_input_shape(model: Any) -> tuple[int, ...] | None:
     return tuple(1 if d is None else d for d in shape)
 
 
-def _quantize_keras(path_in: Path, path_out: Path) -> tuple[dict[str, str], str | None]:
+def _quantize_keras(
+    path_in: Path, path_out: Path
+) -> tuple[Callable[[], dict[str, str]], str | None]:
     import tensorflow as tf
 
     # safe_mode=True rejects Lambda layers / arbitrary-callable configs instead of
@@ -169,7 +181,7 @@ def _quantize_keras(path_in: Path, path_out: Path) -> tuple[dict[str, str], str 
 
     input_shape = _keras_input_shape(model)
     if input_shape is None:
-        return _not_measured("input shape unknown"), ".tflite"
+        return lambda: _not_measured("input shape unknown"), ".tflite"
 
     rng = np.random.default_rng(0)
     sample = rng.standard_normal(input_shape).astype(np.float32)
@@ -183,13 +195,15 @@ def _quantize_keras(path_in: Path, path_out: Path) -> tuple[dict[str, str], str 
         interpreter.invoke()
         return [interpreter.get_tensor(output_details["index"])]
 
-    metrics = compare_runs(
-        lambda f: [model.predict(sample, verbose=0)], _run_tflite, {"input": sample}
-    )
-    return metrics, ".tflite"
+    def _fallback() -> dict[str, str]:
+        return compare_runs(
+            lambda f: [model.predict(sample, verbose=0)], _run_tflite, {"input": sample}
+        )
+
+    return _fallback, ".tflite"
 
 
-_QUANTIZERS: dict[str, Callable[[Path, Path], tuple[dict[str, str], str | None]]] = {
+_QUANTIZERS: dict[str, Callable[[Path, Path], tuple[Callable[[], dict[str, str]], str | None]]] = {
     "onnx": _quantize_onnx,
     "torchscript": _quantize_torchscript,
     "torch": _quantize_torch_statedict,
@@ -267,7 +281,7 @@ def _run_in_tempdir(
     try:
         if quantizer is None:
             raise UnsupportedFormatError(f"no INT8-dynamic path for format {model.format!r}")
-        metrics, output_extension = quantizer(local_in, local_out)
+        fallback_fn, output_extension = quantizer(local_in, local_out)
     except (JobCanceledError, JobTimeoutError, SpotInterruptedError):
         raise
     except Exception as error:  # noqa: BLE001 — classify framework failures for the UI
@@ -293,6 +307,9 @@ def _run_in_tempdir(
     event_repo.append(
         user_id, job_id, stage="Measuring accuracy", message="Comparing outputs before/after"
     )
+    metrics, measured_on_validation, evaluation_detail = evaluation.evaluate_or_fallback(
+        model_record=model, control=control, fallback=fallback_fn, runner_factory=None,
+    )
     control.check()
 
     output_bytes = local_out.stat().st_size
@@ -309,7 +326,8 @@ def _run_in_tempdir(
             "outputBytes": output_bytes,
             "downloadName": download_name,
             "metrics": metrics,
-            "measuredOnValidation": False,
+            "measuredOnValidation": measured_on_validation,
+            "evaluation": evaluation_detail,
             "speedNote": None,
             "s3Key": s3_key,
         },

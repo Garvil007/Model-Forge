@@ -1,8 +1,10 @@
-# Pinned, hash-free lock for the cpu-tf worker image: TensorFlow, tf2onnx, onnx2tf — plus
-# modelforge-workers' own base deps. Generated from a real resolved install
-# (`pip install -e workers[tf-ops] tf2onnx onnx2tf`) on 2026-10-18; regenerate with the
-# same command in a clean venv whenever a version here needs bumping, rather than
-# hand-editing one line at a time.
+# Pinned, hash-free lock for the cpu-tf worker image: TensorFlow, tf2onnx, onnx2tf,
+# transformers (text_cls/lm tokenizer), pycocotools (detection mAP50-95) — plus
+# modelforge-workers' own base deps (now including pillow, needed by core/datasets'
+# image loaders). Generated from a real resolved install (`pip install -e workers[tf-ops]
+# tf2onnx onnx2tf transformers pycocotools`) on 2026-10-18; regenerate with the same
+# command in a clean venv whenever a version here needs bumping, rather than hand-editing
+# one line at a time.
 
 # -- modelforge-workers base deps --
 boto3==1.43.114
@@ -16,6 +18,18 @@ onnxconverter-common==1.16.0
 safetensors==0.8.0
 huggingface-hub==2.2.0
 hf-xet==1.7.0
+pillow==13.0.0
+
+# -- validation-accuracy evaluators (text_cls/lm tokenizer, detection mAP) --
+transformers==5.20.1
+tokenizers==0.23.3
+regex==2026.9.29
+typer==0.27.3
+shellingham==1.5.4
+rich==15.0.0
+markdown-it-py==4.2.0
+mdurl==0.1.2
+pycocotools==2.0.11
 
 # -- tf-ops extra --
 tensorflow_cpu==2.21.0
@@ -57,3 +71,6 @@ charset-normalizer==3.5.2
 idna==3.20
 PyYAML==6.0.3
 six==1.17.0
+tqdm==4.67.1
+filelock==4.2.0
+fsspec==2026.9.0

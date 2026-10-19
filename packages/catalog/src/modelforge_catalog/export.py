@@ -120,6 +120,8 @@ def _param_schema(p: ParamSpec) -> dict[str, Any]:
         return {"type": "string"}
     if p.type == "file":
         return {"type": "string", "description": "Uploaded object key or filename"}
+    if p.type == "dataset":
+        return {"type": "string", "description": "Id of an owned dataset"}
     raise ValueError(f"Unknown param type: {p.type}")  # pragma: no cover - exhaustive above
 
 
@@ -193,7 +195,15 @@ def build_catalog_schema() -> dict[str, Any]:
                     "label": {"type": "string"},
                     "type": {
                         "type": "string",
-                        "enum": ["select", "range", "check", "number", "text", "file"],
+                        "enum": [
+                            "select",
+                            "range",
+                            "check",
+                            "number",
+                            "text",
+                            "file",
+                            "dataset",
+                        ],
                     },
                     "default": {},
                     "help": {"type": "string"},

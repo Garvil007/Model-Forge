@@ -114,11 +114,13 @@ def test_run_job_rejects_unknown_operation_cleanly() -> None:
 
 
 def test_run_job_fails_cleanly_for_known_but_unimplemented_operation() -> None:
-    jobs = _FakeJobRepository(_job(operation_id="q_int8_static"))
+    # q_gptq is declared in the catalog but has no worker implementation yet (q_int8_static,
+    # formerly this test's example, gained one in Phase 4 — see ops/quantize_static.py).
+    jobs = _FakeJobRepository(_job(operation_id="q_gptq"))
     events = _FakeJobEventRepository()
 
     runner.run_job(
-        job_id="job-1", user_id="user-1", model_id="model-1", operation_id="q_int8_static",
+        job_id="job-1", user_id="user-1", model_id="model-1", operation_id="q_gptq",
         job_repo=jobs, event_repo=events,
     )
 

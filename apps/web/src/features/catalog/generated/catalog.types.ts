@@ -40,7 +40,7 @@ export interface Operation {
 export interface Param {
   name: string;
   label: string;
-  type: "select" | "range" | "check" | "number" | "text" | "file";
+  type: "select" | "range" | "check" | "number" | "text" | "file" | "dataset";
   default?: unknown;
   help?: string;
   required?: boolean;

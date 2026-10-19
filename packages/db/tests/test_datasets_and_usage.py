@@ -19,6 +19,25 @@ def test_dataset_create_get_list(table: Any) -> None:
     assert [dataset.dataset_id for dataset in listed] == [second.dataset_id, first.dataset_id]
 
 
+def test_dataset_create_with_explicit_dataset_id(table: Any) -> None:
+    repo = DatasetRepository(table)
+    user_id = unique_id()
+    explicit_id = unique_id()
+
+    created = repo.create(
+        user_id,
+        kind="dataset",
+        filename="a.npz",
+        s3_key="a",
+        size_bytes=1,
+        dataset_id=explicit_id,
+    )
+
+    assert created.dataset_id == explicit_id
+    assert created.model_id is None
+    assert repo.get(user_id, explicit_id) == created
+
+
 def test_dataset_delete(table: Any) -> None:
     repo = DatasetRepository(table)
     user_id = unique_id()

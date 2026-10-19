@@ -15,6 +15,9 @@ dependencies = [
     "onnxconverter-common>=1.14",
     "safetensors>=0.4",
     "huggingface-hub>=0.25",
+    "pillow>=10.0",
+    "transformers>=4.40",
+    "pycocotools>=2.0.7",
 ]
 # modelforge-catalog and modelforge-db aren't on PyPI: install them editable alongside
 # this package (see Makefile / CI, which run

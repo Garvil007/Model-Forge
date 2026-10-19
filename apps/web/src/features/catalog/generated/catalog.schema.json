@@ -104,7 +104,8 @@
             "check",
             "number",
             "text",
-            "file"
+            "file",
+            "dataset"
           ]
         },
         "default": {},

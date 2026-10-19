@@ -16,7 +16,11 @@ Technique = Literal["quantization", "pruning", "distillation", "lowrank"]
 OperationTechnique = Literal["quantization", "pruning", "distillation", "lowrank", "convert"]
 Accuracy = Literal["lossless", "near-lossless", "lossy"]
 Queue = Literal["cpu", "gpu"]
-ParamType = Literal["select", "range", "check", "number", "text", "file"]
+# "dataset" is a marker distinct from generic "file": the submitted value must be an id of a
+# dataset the caller already owns (uploaded via /datasets), not an arbitrary new upload. JSON
+# Schema-wise it's still just a string (see export.py's _param_schema) — the ownership/kind
+# check happens in apps/api, not at the schema level.
+ParamType = Literal["select", "range", "check", "number", "text", "file", "dataset"]
 
 
 @dataclass(frozen=True, slots=True)

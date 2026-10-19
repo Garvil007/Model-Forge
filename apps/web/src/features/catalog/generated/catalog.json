@@ -70,7 +70,7 @@
         "safetensors",
         "yolo"
       ],
-      "workerImage": "cpu-base",
+      "workerImage": "cpu-torch",
       "queue": "cpu",
       "requiredBitWidth": 32
     },
@@ -86,7 +86,7 @@
         "torch",
         "safetensors"
       ],
-      "workerImage": "cpu-base",
+      "workerImage": "cpu-torch",
       "queue": "cpu",
       "requiredBitWidth": 32
     },
@@ -104,7 +104,7 @@
         "torchscript",
         "keras"
       ],
-      "workerImage": "cpu-base",
+      "workerImage": "cpu-torch",
       "queue": "cpu"
     },
     {
@@ -122,14 +122,14 @@
         "keras",
         "yolo"
       ],
-      "workerImage": "cpu-base",
+      "workerImage": "cpu-torch",
       "queue": "cpu",
       "params": [
         {
           "name": "calib",
           "label": "Calibration inputs",
-          "type": "file",
-          "help": "100 to 1,000 real inputs, e.g. a zip of images. No labels needed.",
+          "type": "dataset",
+          "help": "The id of an uploaded dataset with 100 to 1,000 real inputs, e.g. a zip of images. No labels needed.",
           "required": true,
           "accept": ".zip,.npz,.npy"
         },

@@ -16,8 +16,9 @@ from fastapi import APIRouter, Depends
 from modelforge_catalog.plans import limits_for
 from modelforge_catalog.uploads import UnsupportedFileTypeError
 from modelforge_db.exceptions import NotFoundError
-from modelforge_db.records import UserRecord
+from modelforge_db.records import UploadRecord, UserRecord
 from modelforge_db.repositories.base import new_id
+from modelforge_db.repositories.datasets import DatasetRepository
 from modelforge_db.repositories.models import ModelRepository
 from modelforge_db.repositories.uploads import UploadRepository
 from modelforge_db.ttl import retention_seconds
@@ -35,6 +36,7 @@ from ..services import (
     classify_and_enforce_size,
     part_plan,
     sanitize_filename,
+    serialize_dataset,
     serialize_model,
 )
 
@@ -72,6 +74,10 @@ def get_model_repository() -> ModelRepository:
 
 def get_upload_repository() -> UploadRepository:
     return UploadRepository()
+
+
+def get_dataset_repository() -> DatasetRepository:
+    return DatasetRepository()
 
 
 def get_storage_service(settings: Settings = Depends(get_settings)) -> StorageService:  # noqa: B008
@@ -142,6 +148,7 @@ def complete_upload(
     user: Annotated[UserRecord, Depends(current_user)],
     uploads: Annotated[UploadRepository, Depends(get_upload_repository)],
     models: Annotated[ModelRepository, Depends(get_model_repository)],
+    datasets: Annotated[DatasetRepository, Depends(get_dataset_repository)],
     storage: Annotated[StorageService, Depends(get_storage_service)],
     job_queue: Annotated[JobQueueService, Depends(get_job_queue)],
 ) -> dict[str, Any]:
@@ -154,10 +161,7 @@ def complete_upload(
         raise ApiError(404, "upload_not_found", str(error)) from error
 
     if record.status == "completed":
-        try:
-            return serialize_model(models.get(user.user_id, record.entity_id))
-        except NotFoundError as error:
-            raise ApiError(404, "model_not_found", str(error)) from error
+        return _already_completed_response(record, user.user_id, models, datasets)
 
     parts = sorted(
         storage.list_parts(record.s3_key, record.s3_upload_id), key=lambda p: p["PartNumber"]
@@ -183,13 +187,16 @@ def complete_upload(
     uploads.mark_completed(user.user_id, upload_id)
 
     if record.kind == "dataset":
-        return {
-            "id": record.entity_id,
-            "filename": body.model.filename,
-            "size": actual_size,
-            "kind": "dataset",
-            "createdAt": record.created_at,
-        }
+        dataset_record = datasets.create(
+            user.user_id,
+            kind="dataset",
+            filename=body.model.filename,
+            s3_key=record.s3_key,
+            size_bytes=actual_size,
+            model_id=None,
+            dataset_id=record.entity_id,
+        )
+        return serialize_dataset(dataset_record)
 
     hint = body.model
     model_record = models.create(
@@ -221,3 +228,22 @@ def complete_upload(
         raise ApiError(503, "enqueue_failed", "Could not schedule format detection.") from error
 
     return serialize_model(model_record)
+
+
+def _already_completed_response(
+    record: UploadRecord,
+    user_id: str,
+    models: ModelRepository,
+    datasets: DatasetRepository,
+) -> dict[str, Any]:
+    """A retried `complete` call for an upload that already finished — look the entity
+    up by the kind recorded on the upload session rather than guessing."""
+    if record.kind == "dataset":
+        try:
+            return serialize_dataset(datasets.get(user_id, record.entity_id))
+        except NotFoundError as error:
+            raise ApiError(404, "dataset_not_found", str(error)) from error
+    try:
+        return serialize_model(models.get(user_id, record.entity_id))
+    except NotFoundError as error:
+        raise ApiError(404, "model_not_found", str(error)) from error

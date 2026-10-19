@@ -36,6 +36,18 @@ def test_every_operation_schema_is_valid_json_with_properties() -> None:
         assert "properties" in reloaded
 
 
+def test_dataset_param_type_emits_string_schema_with_dataset_description() -> None:
+    op = next(m for m in METHODS if m.id == "q_int8_static")
+    schema = build_param_schema(op)
+    calib_schema = schema["properties"]["calib"]
+    assert calib_schema == {"type": "string", "description": "Id of an owned dataset"}
+
+
+def test_catalog_schema_param_type_enum_includes_dataset() -> None:
+    schema = build_catalog_schema()
+    assert "dataset" in schema["$defs"]["Param"]["properties"]["type"]["enum"]
+
+
 def test_write_catalog_writes_catalog_json_and_schemas(tmp_path: Path) -> None:
     write_catalog(tmp_path)
     assert (tmp_path / "catalog.json").exists()

@@ -6,7 +6,7 @@ Contract matches apps/web/src/api/types.ts (ApiModel, ImportHfRequest) and the d
 from __future__ import annotations
 
 import re
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends
 from modelforge_catalog.plans import limits_for
@@ -14,6 +14,7 @@ from modelforge_db.encryption import KmsEncryptor
 from modelforge_db.exceptions import NotFoundError
 from modelforge_db.records import UserRecord
 from modelforge_db.repositories.base import new_id
+from modelforge_db.repositories.datasets import DatasetRepository
 from modelforge_db.repositories.models import ModelRepository
 from modelforge_db.repositories.users import UserRepository
 from modelforge_db.ttl import retention_seconds
@@ -46,8 +47,26 @@ class ImportHfRequest(_Camel):
     token: SecretStr | None = None
 
 
+class PreprocessConfig(_Camel):
+    input_size: int | None = None
+    mean: list[float] | None = None
+    std: list[float] | None = None
+    channel_order: str | None = None
+    layout: str | None = None
+
+
+class UpdateValidationRequest(_Camel):
+    dataset_id: str = Field(min_length=1)
+    task_type: Literal["image_cls", "detection", "text_cls", "lm"]
+    preprocess: PreprocessConfig | None = None
+
+
 def get_model_repository() -> ModelRepository:
     return ModelRepository()
+
+
+def get_dataset_repository() -> DatasetRepository:
+    return DatasetRepository()
 
 
 def get_user_repository() -> UserRepository:
@@ -80,6 +99,43 @@ def get_model(
         return serialize_model(models.get(user.user_id, model_id))
     except NotFoundError as error:
         raise ApiError(404, "model_not_found", str(error)) from error
+
+
+@router.patch("/{model_id}/validation")
+def set_validation_dataset(
+    model_id: str,
+    body: UpdateValidationRequest,
+    user: Annotated[UserRecord, Depends(current_user)],
+    models: Annotated[ModelRepository, Depends(get_model_repository)],
+    datasets: Annotated[DatasetRepository, Depends(get_dataset_repository)],
+) -> dict[str, Any]:
+    try:
+        models.get(user.user_id, model_id)
+    except NotFoundError as error:
+        raise ApiError(404, "model_not_found", str(error)) from error
+
+    try:
+        dataset = datasets.get(user.user_id, body.dataset_id)
+    except NotFoundError as error:
+        raise ApiError(404, "dataset_not_found", str(error)) from error
+
+    if dataset.kind != "dataset":
+        raise ApiError(
+            400, "invalid_dataset_kind", f"dataset {body.dataset_id!r} is not a dataset upload"
+        )
+
+    preprocess = (
+        body.preprocess.model_dump(by_alias=True, exclude_none=True) if body.preprocess else {}
+    )
+    updated = models.update_validation(
+        user.user_id,
+        model_id,
+        validation_dataset_id=body.dataset_id,
+        validation_filename=dataset.filename,
+        task_type=body.task_type,
+        preprocess=preprocess,
+    )
+    return serialize_model(updated)
 
 
 @router.post("/import-hf", status_code=201)

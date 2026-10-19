@@ -117,14 +117,18 @@ METHODS: tuple[OperationSpec, ...] = (
         typical_impact="usually under 1% with good calibration data",
         time_estimate="1 to 10 minutes",
         source_formats=("onnx", "torch", "torchscript", "keras", "yolo"),
+        worker_image="cpu-torch",
         params=(
             ParamSpec(
                 name="calib",
                 label="Calibration inputs",
-                type="file",
+                type="dataset",
                 accept=".zip,.npz,.npy",
                 required=True,
-                help="100 to 1,000 real inputs, e.g. a zip of images. No labels needed.",
+                help=(
+                    "The id of an uploaded dataset with 100 to 1,000 real inputs, e.g. a zip "
+                    "of images. No labels needed."
+                ),
             ),
             ParamSpec(
                 name="samples",

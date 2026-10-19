@@ -74,10 +74,17 @@ def _fp_cast_op(**kwargs: Any) -> None:
     fp_cast.run(**kwargs)
 
 
+def _quantize_static_op(**kwargs: Any) -> None:
+    from ops import quantize_static
+
+    quantize_static.run(**kwargs)
+
+
 _OPS_BY_OPERATION_ID: dict[str, OpFunction] = {
     "q_int8_dyn": _quantize_dynamic_op,
     "q_fp16": _fp_cast_op,
     "q_bf16": _fp_cast_op,
+    "q_int8_static": _quantize_static_op,
 }
 
 

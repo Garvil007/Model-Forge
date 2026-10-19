@@ -17,7 +17,7 @@ from modelforge_catalog.plans import PlanLimits, limits_for
 from modelforge_catalog.system_jobs import SystemJobKind
 from modelforge_catalog.system_jobs import build_message as build_system_job_message
 from modelforge_catalog.uploads import classify_extension
-from modelforge_db.records import JobEventRecord, JobRecord, ModelRecord
+from modelforge_db.records import DatasetRecord, JobEventRecord, JobRecord, ModelRecord
 
 from .aws import get_s3_client, get_sqs_client
 from .config import Settings
@@ -188,6 +188,16 @@ def serialize_model(record: ModelRecord) -> dict[str, Any]:
         "createdAt": record.created_at,
         "status": record.status,
         "detectionError": details.get("detectionError"),
+    }
+
+
+def serialize_dataset(record: DatasetRecord) -> dict[str, Any]:
+    return {
+        "id": record.dataset_id,
+        "filename": record.filename,
+        "size": record.size_bytes,
+        "kind": "dataset",
+        "createdAt": record.created_at,
     }
 
 

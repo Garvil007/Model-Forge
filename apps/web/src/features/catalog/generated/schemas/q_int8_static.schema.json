@@ -5,7 +5,7 @@
   "properties": {
     "calib": {
       "type": "string",
-      "description": "Uploaded object key or filename"
+      "description": "Id of an owned dataset"
     },
     "samples": {
       "type": "number",

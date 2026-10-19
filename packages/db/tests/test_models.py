@@ -70,6 +70,54 @@ def test_update_status(table: Any) -> None:
     assert repo.get(user_id, created.model_id).status == "archived"
 
 
+def test_update_validation_merges_details_without_touching_other_keys(table: Any) -> None:
+    repo = ModelRepository(table)
+    user_id = unique_id()
+    created = repo.create(
+        user_id,
+        filename="a.onnx",
+        s3_key="a",
+        size_bytes=1,
+        format="onnx",
+        family="x",
+        details={"source": "upload"},
+    )
+
+    updated = repo.update_validation(
+        user_id,
+        created.model_id,
+        validation_dataset_id="dataset-1",
+        validation_filename="val.npz",
+        task_type="image_cls",
+        preprocess={"inputSize": 224, "mean": [0.5, 0.5, 0.5]},
+    )
+
+    assert updated.details["source"] == "upload"
+    assert updated.details["validationDatasetId"] == "dataset-1"
+    assert updated.details["validationFilename"] == "val.npz"
+    assert updated.details["taskType"] == "image_cls"
+    assert updated.details["preprocess"] == {"inputSize": 224, "mean": [0.5, 0.5, 0.5]}
+    assert repo.get(user_id, created.model_id).details == updated.details
+
+
+def test_update_validation_missing_model_raises_not_found(table: Any) -> None:
+    repo = ModelRepository(table)
+
+    try:
+        repo.update_validation(
+            unique_id(),
+            unique_id(),
+            validation_dataset_id="dataset-1",
+            validation_filename="val.npz",
+            task_type="image_cls",
+            preprocess={},
+        )
+    except NotFoundError:
+        pass
+    else:
+        raise AssertionError("expected NotFoundError")
+
+
 def test_delete_removes_model(table: Any) -> None:
     repo = ModelRepository(table)
     user_id = unique_id()

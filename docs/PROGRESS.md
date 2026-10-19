@@ -352,7 +352,84 @@ Update at the end of every day. Check items off as "Done when" criteria pass.
       `torch.jit.load` or `tf.keras.models.load_model` — both still parse untrusted bytes
       from the user's uploaded file. Worth a dedicated pass before any of this touches
       production traffic.
-- [ ] Day 12: INT8 static and real accuracy — INT8 static run on a real small classifier reports believable accuracy before and after.
+- [x] Day 12: INT8 static and real accuracy — INT8 static run on a real small classifier reports believable accuracy before and after.
+      **Dataset persistence (apps/api + packages/db):** `POST /uploads/{id}/complete` for
+      `kind="dataset"` now actually persists a `DatasetRecord` via `DatasetRepository.create`
+      instead of echoing an unpersisted dict (a pre-existing gap — the repository was fully
+      implemented but never called). Added `GET /datasets` and `PATCH /models/{id}/validation`
+      (`{datasetId, taskType, preprocess?}`) to attach a labeled validation set to a model —
+      validation data lives at the model level, reused across every op/job on it, matching the
+      prototype. Neither endpoint opens the uploaded file; only ownership/id/schema are checked
+      in apps/api, per the "workers only open model/dataset files" rule.
+      **Catalog (packages/catalog):** new `validation.py` — `TaskType` (`image_cls`/`detection`/
+      `text_cls`/`lm`), `PreprocessSpec` (input size/mean/std/channel order/layout, vision
+      defaults), `TASK_TYPE_INFO` (accepted extensions + metric label + `lower_is_better` per
+      task), `format_metric()` for the two "X (was Y)" / "X before, Y after (lower is better)"
+      display conventions the prototype and `ResultPanel` already use. Fixed `q_int8_static`
+      missing `worker_image="cpu-torch"` (present on sibling `q_int8_dyn`, missing here — a
+      pre-existing bug). Added a `"dataset"` param type (schema-equivalent to `"file"`, but lets
+      apps/api branch on "this value must be an owned dataset id" without hardcoding the param
+      name) and switched `calib` to it.
+      **Workers — dataset loaders (`workers/core/datasets/`):** `imagefolder.py` (ImageFolder-zip
+      image classification), `detection.py` (YOLO-zip or COCO-zip, auto-detected), `text.py`
+      (CSV/JSONL text classification), `lm.py` (txt/JSONL language modeling), `calibration.py`
+      (unlabeled zip-of-images or `.npy`/`.npz`, feeding `q_int8_static`'s calibration). All
+      zip loaders go through `base.py`'s `safe_extract_zip` (zip-slip rejection, file-count and
+      total-size caps) and respect `max_samples` + cooperative `JobControl.check()` so
+      cancellation/timeout still work mid-load. `.npy`/`.npz` loading refuses
+      `allow_pickle=True` unconditionally. A security review during this work flagged a second
+      path-traversal vector in `detection.py`'s COCO loader (an `annotations.json` `file_name`
+      joined straight into a filesystem path, with no containment check) — fixed with a new
+      `safe_join()` helper in `base.py` shared with the zip-slip check, and the fix no longer
+      echoes the attacker-supplied filename in the error message; covered by a new regression
+      test (`test_coco_file_name_path_traversal_is_rejected`).
+      **Workers — evaluators (`workers/core/evaluators/`):** top-1/top-5 (`topk.py`), accuracy +
+      macro-F1 (`cls_f1.py`), perplexity (`perplexity.py`, takes a pre-built tokenizer), and
+      mAP50-95 (`map_eval.py`) behind a shared `Evaluator` protocol. `map_eval.py` uses a
+      pure-Python, VOC2012-style IoU-matching AP calculation rather than
+      `pycocotools.cocoeval.COCOeval` — `pycocotools` is now installed (see below) for other
+      callers, but swapping this evaluator onto `COCOeval` needs its own in-memory COCO-JSON
+      construction and a dedicated verification pass, left as a follow-up; treat this
+      evaluator's numbers as directionally correct; it is covered only by its own unit tests on
+      synthetic boxes, not validated against COCO's official reference metric.
+      `workers/core/model_runner.py` unifies ONNX Runtime / TFLite / torch/TorchScript inference
+      behind one `ModelRunnerProtocol`, so the same evaluator runs against the original and
+      quantized model.
+      **Workers — `evaluation.py` and `quantize_static.py`:** `evaluate_or_fallback()` is the
+      single entry point: if a model has a validation dataset configured, it runs the matching
+      evaluator on both models and returns real before/after numbers formatted via
+      `format_metric`; otherwise it falls back to the existing random-input `compare_runs`
+      similarity check, unchanged. Any failure on the validation-data path (bad format, missing
+      tokenizer, S3 error, ...) degrades gracefully to the fallback rather than failing the job,
+      with a note explaining why real accuracy wasn't measured — cooperative-cancellation
+      exceptions are still re-raised, never swallowed. `q_int8_static` (`workers/ops/
+      quantize_static.py`) is the new op: ONNX via `onnxruntime.quantization.quantize_static`
+      (QDQ format, minmax/entropy/percentile calibration methods, per-channel option, all
+      driven by the catalog's existing params), Keras/SavedModel via `TFLiteConverter` with a
+      `representative_dataset` generator for full INT8 conversion, and TorchScript sources via
+      auto-export to ONNX first (using the calibration data's own sample shape, since no other
+      shape source exists) then the same ONNX path — a clean `unsupported_operator` error if
+      export fails. Registered in `runner.py`'s `_OPS_BY_OPERATION_ID`. `quantize_dynamic.py`
+      (`q_int8_dyn`) was retrofitted to call `evaluate_or_fallback()` too, as a cheap proof the
+      shared layer works for an existing op — but it still passes no `runner_factory`, so it
+      only ever takes the fallback path for now; wiring real per-format runners into it so
+      `q_int8_dyn` also gets real validation accuracy is a natural follow-up, not done here.
+      **Dependencies:** `pillow`, `transformers`, and `pycocotools` added as base deps in
+      `workers/pyproject.toml` (needed regardless of which worker image runs the op, since
+      evaluation can run on either). Both `workers/images/cpu-torch` and `cpu-tf`
+      `requirements.lock.txt` updated with real pip-resolved pins for all three plus their
+      transitive deps (`tokenizers`, `regex`, `typer`, `rich`, etc.) — `cpu-tf`'s lock
+      previously had no `pillow`/`tqdm`/`filelock`/`fsspec` at all, since nothing on that image
+      needed them before. Neither Dockerfile has actually been rebuilt with the new lock files
+      in this environment (same Docker Desktop limitation noted on Days 1, 9, 10, 11) — every
+      added package was verified by installing it directly into `workers/.venv` and running the
+      real test suite (128 passed) against it.
+      **Known gaps, left for a follow-up:** text classification and language-modeling
+      evaluation need a tokenizer, fetched lazily via `transformers.AutoTokenizer.from_pretrained`
+      against the model's HF repo id if it has one — a model with no repo id and no uploaded
+      tokenizer degrades to the similarity fallback rather than failing. The detection loader's
+      box-coordinate convention (absolute pixels in a resized, non-aspect-preserving square
+      frame) is a documented simplification, not a production-grade letterboxed pipeline.
 - [ ] Day 13: Conversions — every conversion visible in the interface works, or is correctly hidden for that format.
 - [ ] Day 14: LLM quantization — GGUF Q4_K_M of a small real model loads in llama.cpp; GPU methods pass CPU-mode tests.
 - [ ] Day 15: Pruning — structured pruning at 30% gives a smaller and faster model; fine-tuning run resumes after killing the worker.

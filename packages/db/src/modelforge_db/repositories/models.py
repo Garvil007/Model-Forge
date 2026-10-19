@@ -141,6 +141,44 @@ class ModelRepository:
             raise
         return _to_record(response["Attributes"])
 
+    def update_validation(
+        self,
+        user_id: str,
+        model_id: str,
+        *,
+        validation_dataset_id: str,
+        validation_filename: str,
+        task_type: str,
+        preprocess: dict[str, Any],
+    ) -> ModelRecord:
+        """Merge validation-dataset metadata into `details` without touching other keys."""
+        try:
+            response = self._table.update_item(
+                Key={"PK": user_pk(user_id), "SK": model_sk(model_id)},
+                UpdateExpression=(
+                    "SET details.validationDatasetId = :datasetId, "
+                    "details.validationFilename = :filename, "
+                    "details.taskType = :taskType, "
+                    "details.preprocess = :preprocess, "
+                    "updatedAt = :updatedAt"
+                ),
+                ConditionExpression="attribute_exists(PK)",
+                ExpressionAttributeValues={
+                    ":datasetId": validation_dataset_id,
+                    ":filename": validation_filename,
+                    ":taskType": task_type,
+                    ":preprocess": decimalize(preprocess),
+                    ":updatedAt": now_iso(),
+                },
+                ReturnValues="ALL_NEW",
+            )
+        except ClientError as error:
+            raise_not_found_on_condition_failure(
+                error, f"model {model_id!r} not found for user {user_id!r}"
+            )
+            raise
+        return _to_record(response["Attributes"])
+
     def mark_failed(
         self, user_id: str, model_id: str, *, code: str, message: str
     ) -> ModelRecord:
