@@ -1,0 +1,156 @@
+# Pinned, hash-free lock for the cpu-convert worker image: backs every Convert-tab op
+# (c_onnx, c_tflite, c_torchscript, c_savedmodel, c_safetensors, c_openvino) except
+# TensorRT and Core ML, per `packages/catalog/src/modelforge_catalog/converts.py`'s
+# `worker_image="cpu-convert"` on those six OperationSpecs. A single combined image is
+# used (instead of splitting across cpu-torch/cpu-tf) because several of these ops need
+# both frameworks within one job — e.g. c_tflite's torch-sourced... actually no torch-
+# sourced chain is implemented (see workers/ops/convert_tflite.py's docstring for why), but
+# c_tflite's `onnx`/`keras` casters need TensorFlow while its `yolo` caster needs PyTorch +
+# Ultralytics, and a single `OperationSpec` can only declare one `worker_image`.
+#
+# Generated from a real resolved install (`pip install -e workers[torch-ops,tf-ops,
+# convert-ops] ultralytics transformers pycocotools`, plus `tf_keras` — needed by
+# onnx2tf's `tflite_backend="tf_converter"` SavedModel output path, see
+# workers/ops/convert_savedmodel.py's docstring) on 2026-10-18; regenerate with the same
+# command in a clean venv whenever a version here needs bumping, rather than hand-editing
+# one line at a time.
+#
+# `tf_keras` declares a dependency on the full `tensorflow` PyPI package
+# (`tensorflow<2.22,>=2.21`), not `tensorflow_cpu`. Tried dropping the separate
+# `tensorflow` wheel and keeping only `tensorflow_cpu` (consistent with the `tf-ops`
+# extra's `sys_platform` split) — that broke the import outright
+# (`AttributeError: module 'tensorflow' has no attribute '__version__'`, confirmed by
+# actually uninstalling `tensorflow` in this venv and reproducing it), so both packages
+# are pinned here; this roughly doubles this image's TensorFlow footprint versus
+# `cpu-tf`'s `tensorflow_cpu`-only install, which is the real cost of onnx2tf's
+# SavedModel output path (`tflite_backend="tf_converter"`) needing `tf_keras`.
+#
+# torch comes from the CPU-only wheel index — build with:
+#   pip install -r requirements.lock.txt --extra-index-url https://download.pytorch.org/whl/cpu
+
+# -- modelforge-workers base deps --
+boto3==1.43.114
+botocore==1.43.114
+s3transfer==0.19.2
+jmespath==1.1.0
+h5py==3.14.0
+onnx==1.20.1
+onnxruntime==1.26.0
+onnxconverter-common==1.16.0
+safetensors==0.8.0
+huggingface-hub==0.36.2
+hf-xet==1.7.0
+pillow==13.0.0
+
+# -- torch-ops extra --
+torch==2.14.1+cpu
+sympy==1.14.0
+mpmath==1.3.0
+networkx==3.6.1
+Jinja2==3.1.6
+MarkupSafe==3.0.3
+
+# -- tf-ops extra --
+tensorflow_cpu==2.21.0
+keras==3.15.1
+ml_dtypes==0.5.4
+absl-py==2.5.1
+astunparse==1.6.3
+gast==0.7.0
+google-pasta==0.2.0
+grpcio==1.84.0
+libclang==18.1.1
+opt_einsum==3.4.0
+optree==0.20.0
+termcolor==3.3.0
+wrapt==2.5.1
+namex==0.1.0
+ai-edge-litert==2.1.2
+
+# -- convert-ops extra --
+onnx2tf==2.6.9
+onnx2torch==1.5.15
+tf2onnx==1.17.0
+openvino==2026.4.1
+openvino-telemetry==2025.2.0
+nncf==3.4.0
+scikit-learn==1.9.1
+scipy==1.18.1
+joblib==1.6.0
+threadpoolctl==3.7.0
+cloudpickle==3.1.2
+ninja==1.13.2
+pydot==4.0.1
+tabulate==0.10.0
+narwhals==2.27.1
+optimum==2.1.0
+optimum-onnx==0.1.0
+ultralytics==8.4.182
+ultralytics-thop==2.2.2
+ultralytics-platform==0.1.90
+torchvision==0.29.1
+opencv-python==4.13.0.92
+matplotlib==3.11.2
+contourpy==1.4.0
+cycler==0.12.1
+fonttools==4.67.0
+kiwisolver==1.5.1
+pyparsing==3.3.3
+polars==2.0.0
+polars-runtime-32==2.0.0
+psutil==5.9.5
+Pygments==2.21.0
+nvidia-ml-py==13.615.71
+colorama==0.4.6
+onnxoptimizer==0.4.2
+onnxscript==0.6.2
+onnxsim==0.6.5
+onnxslim==0.1.98
+onnx-ir==1.0.0
+sng4onnx==2.0.1
+sne4onnx==2.0.1
+tensorflow==2.21.0
+tf_keras==2.21.0
+
+# -- validation-accuracy evaluators (text_cls/lm tokenizer, detection mAP) --
+transformers==4.57.6
+tokenizers==0.22.2
+regex==2026.9.29
+typer==0.27.3
+shellingham==1.5.4
+rich==15.0.0
+markdown-it-py==4.2.0
+mdurl==0.1.2
+pycocotools==2.0.11
+
+# -- optimum's own HF stack (its export path uses a newer httpx-based hub client) --
+anyio==4.15.1
+httpcore==1.0.9
+httpcore2==2.13.1
+httpx==0.28.1
+httpx2==2.13.1
+h11==0.16.0
+truststore==0.10.5
+annotated-doc==0.0.5
+ast_serialize==0.13.0
+backports.strenum==1.2.8
+click==8.5.0
+librt==0.16.0
+
+# -- shared transitive deps --
+numpy==2.2.6
+protobuf==7.35.1
+flatbuffers==25.12.19
+packaging==26.3
+typing_extensions==4.16.0
+requests==2.34.2
+urllib3==2.8.0
+certifi==2026.7.22
+charset-normalizer==3.5.2
+idna==3.20
+PyYAML==6.0.3
+six==1.17.0
+tqdm==4.67.1
+filelock==4.2.0
+fsspec==2026.9.0
+python-dateutil==2.9.0.post0

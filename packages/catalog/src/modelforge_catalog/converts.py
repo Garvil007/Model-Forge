@@ -27,6 +27,7 @@ CONVERTS: tuple[OperationSpec, ...] = (
             ParamSpec(name="dynamic", label="Dynamic batch size", type="check", default=True),
         ),
         size_estimate=lambda m, v: m.size * 1,
+        worker_image="cpu-convert",
     ),
     OperationSpec(
         id="c_tflite",
@@ -45,6 +46,7 @@ CONVERTS: tuple[OperationSpec, ...] = (
             ),
         ),
         size_estimate=lambda m, v: m.size * (16 / m.bits if v["precision"] == "fp16" else 1),
+        worker_image="cpu-convert",
     ),
     OperationSpec(
         id="c_torchscript",
@@ -57,6 +59,7 @@ CONVERTS: tuple[OperationSpec, ...] = (
         source_formats=("onnx", "yolo", "torch"),
         target_format="torchscript",
         size_estimate=lambda m, v: m.size * 1,
+        worker_image="cpu-convert",
     ),
     OperationSpec(
         id="c_savedmodel",
@@ -69,6 +72,7 @@ CONVERTS: tuple[OperationSpec, ...] = (
         source_formats=("onnx", "keras"),
         target_format="savedmodel",
         size_estimate=lambda m, v: m.size * 1,
+        worker_image="cpu-convert",
     ),
     OperationSpec(
         id="c_safetensors",
@@ -81,6 +85,7 @@ CONVERTS: tuple[OperationSpec, ...] = (
         source_formats=("torch",),
         target_format="safetensors",
         size_estimate=lambda m, v: m.size * 1,
+        worker_image="cpu-convert",
     ),
     OperationSpec(
         id="c_gguf",
@@ -131,6 +136,7 @@ CONVERTS: tuple[OperationSpec, ...] = (
         ),
         size_estimate=lambda m, v: m.size
         * ({"fp32": 32, "fp16": 16, "int8": 8.2}[v["precision"]] / m.bits),
+        worker_image="cpu-convert",
     ),
     OperationSpec(
         id="c_tensorrt",

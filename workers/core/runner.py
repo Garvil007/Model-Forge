@@ -22,7 +22,8 @@ which an op must call between stages.
 from __future__ import annotations
 
 import os
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from modelforge_catalog import OPERATIONS, job_messages
 from modelforge_catalog.models import OperationSpec
@@ -80,11 +81,53 @@ def _quantize_static_op(**kwargs: Any) -> None:
     quantize_static.run(**kwargs)
 
 
+def _convert_onnx_op(**kwargs: Any) -> None:
+    from ops import convert_onnx
+
+    convert_onnx.run(**kwargs)
+
+
+def _convert_tflite_op(**kwargs: Any) -> None:
+    from ops import convert_tflite
+
+    convert_tflite.run(**kwargs)
+
+
+def _convert_torchscript_op(**kwargs: Any) -> None:
+    from ops import convert_torchscript
+
+    convert_torchscript.run(**kwargs)
+
+
+def _convert_savedmodel_op(**kwargs: Any) -> None:
+    from ops import convert_savedmodel
+
+    convert_savedmodel.run(**kwargs)
+
+
+def _convert_safetensors_op(**kwargs: Any) -> None:
+    from ops import convert_safetensors
+
+    convert_safetensors.run(**kwargs)
+
+
+def _convert_openvino_op(**kwargs: Any) -> None:
+    from ops import convert_openvino
+
+    convert_openvino.run(**kwargs)
+
+
 _OPS_BY_OPERATION_ID: dict[str, OpFunction] = {
     "q_int8_dyn": _quantize_dynamic_op,
     "q_fp16": _fp_cast_op,
     "q_bf16": _fp_cast_op,
     "q_int8_static": _quantize_static_op,
+    "c_onnx": _convert_onnx_op,
+    "c_tflite": _convert_tflite_op,
+    "c_torchscript": _convert_torchscript_op,
+    "c_savedmodel": _convert_savedmodel_op,
+    "c_safetensors": _convert_safetensors_op,
+    "c_openvino": _convert_openvino_op,
 }
 
 

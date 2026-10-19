@@ -42,6 +42,13 @@ class TfliteModelRunner:
         self._input_details = self._interpreter.get_input_details()[0]
         self._output_details = self._interpreter.get_output_details()[0]
 
+    @property
+    def input_shape(self) -> tuple[int, ...]:
+        """The interpreter's expected input shape — exposed so a caller feeding an
+        already-NCHW sample (built against the *source* model) can tell whether this
+        TFLite model expects NHWC instead and transpose before calling `predict`."""
+        return tuple(int(dim) for dim in self._input_details["shape"])
+
     def predict(self, batch: np.ndarray) -> np.ndarray:
         array = np.asarray(batch).astype(self._input_details["dtype"])
         self._interpreter.set_tensor(self._input_details["index"], array)

@@ -30,9 +30,27 @@ dependencies = [
 # framework lazily, so an op module still imports fine on whichever image lacks the other.
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.11", "modelforge-workers[torch-ops,tf-ops]"]
+dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.11", "modelforge-workers[torch-ops,tf-ops,convert-ops]"]
 torch-ops = ["torch>=2.2"]
 tf-ops = ["tensorflow-cpu>=2.16; sys_platform != 'darwin'", "tensorflow>=2.16; sys_platform == 'darwin'"]
+# The Convert tab (`convert_*.py`) needs both torch-ops and tf-ops plus format-conversion
+# libraries no other op uses: onnx2tf (onnx->tflite/savedmodel), onnx2torch (onnx->
+# torchscript), tf2onnx (keras->onnx, via its CLI — see convert_onnx.py's docstring for
+# why the Python API doesn't work against Keras 3), openvino + nncf (onnx/keras/yolo/HF->
+# OpenVINO IR, including calibration-free INT8 weight compression), optimum[onnxruntime]
+# (HF safetensors -> ONNX), and ultralytics (any YOLO source/target).
+convert-ops = [
+    "onnx2tf>=2.6",
+    "onnx2torch>=1.5",
+    "tf2onnx>=1.17",
+    "openvino>=2026.0",
+    "nncf>=3.4",
+    "optimum[onnxruntime]>=2.1",
+    "ultralytics>=8.4",
+    # onnx2tf's SavedModel output needs its "tf_converter" backend, which needs this
+    # optional Keras-2-compat package even though the rest of this image is Keras 3.
+    "tf_keras>=2.21",
+]
 
 [tool.setuptools.packages.find]
 where = ["."]
