@@ -171,6 +171,18 @@ def _prune_wanda_op(**kwargs: Any) -> None:
     prune_wanda.run(**kwargs)
 
 
+def _lowrank_svd_op(**kwargs: Any) -> None:
+    from ops import lowrank_svd
+
+    lowrank_svd.run(**kwargs)
+
+
+def _lowrank_tucker_op(**kwargs: Any) -> None:
+    from ops import lowrank_tucker
+
+    lowrank_tucker.run(**kwargs)
+
+
 _OPS_BY_OPERATION_ID: dict[str, OpFunction] = {
     "q_int8_dyn": _quantize_dynamic_op,
     "q_fp16": _fp_cast_op,
@@ -184,6 +196,8 @@ _OPS_BY_OPERATION_ID: dict[str, OpFunction] = {
     "p_structured": _prune_structured_op,
     "p_24": _prune_24_op,
     "p_wanda": _prune_wanda_op,
+    "l_svd": _lowrank_svd_op,
+    "l_tucker": _lowrank_tucker_op,
     "c_onnx": _convert_onnx_op,
     "c_tflite": _convert_tflite_op,
     "c_torchscript": _convert_torchscript_op,

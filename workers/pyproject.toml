@@ -35,8 +35,10 @@ dev = [
     "modelforge-workers[torch-ops,tf-ops,convert-ops,llm-ops,gpu-ops]",
 ]
 # torch-pruning (p_structured's YOLO path) traces a real nn.Module graph with
-# torch-pruning's own tp.pruner.MagnitudePruner/importance scorers.
-torch-ops = ["torch>=2.2", "torch-pruning>=1.5"]
+# torch-pruning's own tp.pruner.MagnitudePruner/importance scorers. tensorly
+# (l_tucker's Tucker-2/CP conv decomposition) runs on its pure-numpy backend — it
+# doesn't need torch itself, but lives here since loading a torch state_dict does.
+torch-ops = ["torch>=2.2", "torch-pruning>=1.5", "tensorly>=0.8"]
 # tensorflow-model-optimization (p_structured's/p_magnitude's Keras path): prune_low_magnitude
 # + strip_pruning for magnitude-style sparsity — see prune_structured.py's docstring for why
 # this is NOT real structured/channel pruning for Keras, just TF-MOT's shipped API.
