@@ -147,6 +147,30 @@ def _quantize_nf4_op(**kwargs: Any) -> None:
     quantize_nf4.run(**kwargs)
 
 
+def _prune_magnitude_op(**kwargs: Any) -> None:
+    from ops import prune_magnitude
+
+    prune_magnitude.run(**kwargs)
+
+
+def _prune_structured_op(**kwargs: Any) -> None:
+    from ops import prune_structured
+
+    prune_structured.run(**kwargs)
+
+
+def _prune_24_op(**kwargs: Any) -> None:
+    from ops import prune_24
+
+    prune_24.run(**kwargs)
+
+
+def _prune_wanda_op(**kwargs: Any) -> None:
+    from ops import prune_wanda
+
+    prune_wanda.run(**kwargs)
+
+
 _OPS_BY_OPERATION_ID: dict[str, OpFunction] = {
     "q_int8_dyn": _quantize_dynamic_op,
     "q_fp16": _fp_cast_op,
@@ -156,6 +180,10 @@ _OPS_BY_OPERATION_ID: dict[str, OpFunction] = {
     "q_gptq": _quantize_gptq_op,
     "q_awq": _quantize_awq_op,
     "q_nf4": _quantize_nf4_op,
+    "p_magnitude": _prune_magnitude_op,
+    "p_structured": _prune_structured_op,
+    "p_24": _prune_24_op,
+    "p_wanda": _prune_wanda_op,
     "c_onnx": _convert_onnx_op,
     "c_tflite": _convert_tflite_op,
     "c_torchscript": _convert_torchscript_op,

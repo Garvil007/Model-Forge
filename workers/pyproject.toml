@@ -34,8 +34,17 @@ dev = [
     "pytest>=8", "ruff>=0.6", "mypy>=1.11",
     "modelforge-workers[torch-ops,tf-ops,convert-ops,llm-ops,gpu-ops]",
 ]
-torch-ops = ["torch>=2.2"]
-tf-ops = ["tensorflow-cpu>=2.16; sys_platform != 'darwin'", "tensorflow>=2.16; sys_platform == 'darwin'"]
+# torch-pruning (p_structured's YOLO path) traces a real nn.Module graph with
+# torch-pruning's own tp.pruner.MagnitudePruner/importance scorers.
+torch-ops = ["torch>=2.2", "torch-pruning>=1.5"]
+# tensorflow-model-optimization (p_structured's/p_magnitude's Keras path): prune_low_magnitude
+# + strip_pruning for magnitude-style sparsity — see prune_structured.py's docstring for why
+# this is NOT real structured/channel pruning for Keras, just TF-MOT's shipped API.
+tf-ops = [
+    "tensorflow-cpu>=2.16; sys_platform != 'darwin'",
+    "tensorflow>=2.16; sys_platform == 'darwin'",
+    "tensorflow-model-optimization>=0.8",
+]
 # The Convert tab (`convert_*.py`) needs both torch-ops and tf-ops plus format-conversion
 # libraries no other op uses: onnx2tf (onnx->tflite/savedmodel), onnx2torch (onnx->
 # torchscript), tf2onnx (keras->onnx, via its CLI — see convert_onnx.py's docstring for

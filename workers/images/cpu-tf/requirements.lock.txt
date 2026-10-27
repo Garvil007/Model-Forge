@@ -48,6 +48,11 @@ wrapt==2.5.1
 namex==0.1.0
 ai-edge-litert==2.1.2
 
+# -- tensorflow-model-optimization (p_structured's Keras path) --
+# Added for Day 15 (structured pruning); NOT regenerated from a real resolved install
+# in this environment, same caveat as cpu-torch's new torch-pruning line.
+tensorflow-model-optimization==0.8.0
+
 # -- tf2onnx / onnx2tf --
 tf2onnx==1.17.0
 onnx2tf==2.6.9

@@ -475,6 +475,9 @@ METHODS: tuple[OperationSpec, ...] = (
             (14 if v["pattern"] == "2:4" else (v["sparsity"] / 50) ** 2.5 * 8)
             * (0.8 if v["algo"] == "sparsegpt" else 1)
         ),
+        # Same class of fix Days 12/14 made for q_gptq/q_awq/q_nf4: an LLM one-shot op
+        # needs the gpu-base image/queue, not the cpu-torch default every other
+        # OperationSpec here falls back to.
         worker_image="gpu-base",
         queue="gpu",
     ),

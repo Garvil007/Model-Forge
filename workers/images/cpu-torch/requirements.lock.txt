@@ -30,6 +30,12 @@ networkx==3.6.1
 Jinja2==3.1.6
 MarkupSafe==3.0.3
 
+# -- torch-pruning (p_structured's YOLO path) --
+# Added for Day 15 (structured pruning); unlike the rest of this file, NOT regenerated
+# from a real resolved install in this environment (no Docker/network here) — reviewed,
+# not pip-install-verified, the same caveat Day 14's GGUF/GPU-LLM lock entries carry.
+torch-pruning==1.5.6
+
 # -- validation-accuracy evaluators (text_cls/lm tokenizer, detection mAP) --
 transformers==5.20.1
 tokenizers==0.23.3
