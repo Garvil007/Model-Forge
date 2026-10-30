@@ -183,6 +183,24 @@ def _lowrank_tucker_op(**kwargs: Any) -> None:
     lowrank_tucker.run(**kwargs)
 
 
+def _distill_response_op(**kwargs: Any) -> None:
+    from ops import distill_response
+
+    distill_response.run(**kwargs)
+
+
+def _distill_feature_op(**kwargs: Any) -> None:
+    from ops import distill_feature
+
+    distill_feature.run(**kwargs)
+
+
+def _distill_llm_op(**kwargs: Any) -> None:
+    from ops import distill_llm
+
+    distill_llm.run(**kwargs)
+
+
 _OPS_BY_OPERATION_ID: dict[str, OpFunction] = {
     "q_int8_dyn": _quantize_dynamic_op,
     "q_fp16": _fp_cast_op,
@@ -198,6 +216,9 @@ _OPS_BY_OPERATION_ID: dict[str, OpFunction] = {
     "p_wanda": _prune_wanda_op,
     "l_svd": _lowrank_svd_op,
     "l_tucker": _lowrank_tucker_op,
+    "d_logit": _distill_response_op,
+    "d_feature": _distill_feature_op,
+    "d_llm": _distill_llm_op,
     "c_onnx": _convert_onnx_op,
     "c_tflite": _convert_tflite_op,
     "c_torchscript": _convert_torchscript_op,

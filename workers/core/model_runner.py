@@ -28,6 +28,14 @@ class OnnxModelRunner:
         self._session = onnxruntime.InferenceSession(str(path))
         self._input_name = self._session.get_inputs()[0].name
 
+    @property
+    def input_shape(self) -> tuple[int, ...]:
+        """Mirrors `TfliteModelRunner.input_shape` below — dynamic dims (`None`/a symbol)
+        are reported as `1`, the same placeholder `_convert_common.parse_shape` falls back
+        to for a shape it can't resolve."""
+        shape = self._session.get_inputs()[0].shape
+        return tuple(int(dim) if isinstance(dim, int) and dim > 0 else 1 for dim in shape)
+
     def predict(self, batch: np.ndarray) -> np.ndarray:
         outputs = self._session.run(None, {self._input_name: np.asarray(batch, dtype=np.float32)})
         return np.asarray(outputs[0])
@@ -63,6 +71,13 @@ class TorchScriptModelRunner:
         self._torch = torch
         self._module = torch.jit.load(str(path), map_location="cpu")
         self._module.eval()
+
+    @property
+    def module(self) -> Any:
+        """The underlying `ScriptModule` — exposed so a caller needing real submodules
+        (e.g. distillation's feature-matching hooks, `workers/ops/_distill_common.py`)
+        doesn't have to reach past this class's own encapsulation to get them."""
+        return self._module
 
     def predict(self, batch: np.ndarray) -> np.ndarray:
         with self._torch.no_grad():
