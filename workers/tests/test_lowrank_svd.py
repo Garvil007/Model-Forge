@@ -146,18 +146,73 @@ def test_finetune_requested_but_not_available_is_noted_not_failed(tmp_path: Path
     assert "skipped" in jobs.calls[-1]["result"]["metrics"]["Fine-tuning"]
 
 
-def test_onnx_source_fails_cleanly_as_unsupported(tmp_path: Path) -> None:
-    pytest.importorskip("onnx")
-    import onnx
-    from onnx import TensorProto, helper
+def test_onnx_gemm_rewrite_runs_through_onnxruntime_close_to_original(tmp_path: Path) -> None:
+    onnx = pytest.importorskip("onnx")
+    ort = pytest.importorskip("onnxruntime")
+    from onnx import TensorProto, helper, numpy_helper
 
-    weight = helper.make_tensor(
-        "w", TensorProto.FLOAT, [4, 4], list(np.zeros(16, dtype=np.float32))
+    rng = np.random.default_rng(0)
+    # Low effective rank (true rank 6) so 99% energy genuinely saves params and the
+    # rewritten graph reconstructs close to the pre-factorization Gemm output.
+    base = (rng.standard_normal((32, 6)) @ rng.standard_normal((6, 32))).astype(np.float32)
+    bias = rng.standard_normal(32).astype(np.float32)
+
+    weight_init = numpy_helper.from_array(base, "mlp.weight")
+    bias_init = numpy_helper.from_array(bias, "mlp.bias")
+    node = helper.make_node(
+        "Gemm", ["x", "mlp.weight", "mlp.bias"], ["y"], transB=1, name="mlp_gemm"
     )
-    node = helper.make_node("Identity", ["w"], ["out"])
     graph = helper.make_graph(
-        [node], "g", [], [helper.make_tensor_value_info("out", TensorProto.FLOAT, [4, 4])],
-        initializer=[weight],
+        [node], "g",
+        [helper.make_tensor_value_info("x", TensorProto.FLOAT, [1, 32])],
+        [helper.make_tensor_value_info("y", TensorProto.FLOAT, [1, 32])],
+        initializer=[weight_init, bias_init],
+    )
+    model_proto = helper.make_model(graph, opset_imports=[helper.make_opsetid("", 18)])
+    model_proto.ir_version = 9  # pin below onnxruntime's max supported IR in this sandbox
+    local_path = tmp_path / "model.onnx"
+    onnx.save(model_proto, str(local_path))
+
+    model = model_record(filename="model.onnx", model_format="onnx")
+    jobs, _, s3 = _run_svd(
+        model, local_path.read_bytes(),
+        {"mode": "energy", "energy": 99, "layers": "mlp", "finetune": False},
+    )
+
+    assert jobs.calls[-1]["status"] == "succeeded"
+    metrics = jobs.calls[-1]["result"]["metrics"]
+    assert "1 of 1" in metrics["Layers factorized"]
+
+    output_bytes = next(iter(s3.uploaded.values()))
+    output_path = tmp_path / "output.onnx"
+    output_path.write_bytes(output_bytes)
+    assert output_path.stat().st_size < local_path.stat().st_size
+
+    session = ort.InferenceSession(str(output_path))
+    x = rng.standard_normal((1, 32)).astype(np.float32)
+    (y,) = session.run(None, {"x": x})
+    expected = x @ base.T + bias
+    relative_error = np.linalg.norm(y - expected) / np.linalg.norm(expected)
+    assert relative_error < 0.05  # outputs stay close: true rank 6 well under the chosen rank
+
+
+def test_onnx_shared_weight_is_left_untouched(tmp_path: Path) -> None:
+    onnx = pytest.importorskip("onnx")
+    from onnx import TensorProto, helper, numpy_helper
+
+    rng = np.random.default_rng(0)
+    weight = rng.standard_normal((16, 16)).astype(np.float32)
+    weight_init = numpy_helper.from_array(weight, "shared.weight")
+    node_a = helper.make_node("Gemm", ["x", "shared.weight"], ["y1"], transB=1, name="a")
+    node_b = helper.make_node("Gemm", ["x", "shared.weight"], ["y2"], transB=1, name="b")
+    graph = helper.make_graph(
+        [node_a, node_b], "g",
+        [helper.make_tensor_value_info("x", TensorProto.FLOAT, [1, 16])],
+        [
+            helper.make_tensor_value_info("y1", TensorProto.FLOAT, [1, 16]),
+            helper.make_tensor_value_info("y2", TensorProto.FLOAT, [1, 16]),
+        ],
+        initializer=[weight_init],
     )
     model_proto = helper.make_model(graph)
     local_path = tmp_path / "model.onnx"
@@ -165,7 +220,60 @@ def test_onnx_source_fails_cleanly_as_unsupported(tmp_path: Path) -> None:
 
     model = model_record(filename="model.onnx", model_format="onnx")
     jobs, _, _ = _run_svd(
-        model, local_path.read_bytes(), {"mode": "energy", "energy": 95, "finetune": False}
+        model, local_path.read_bytes(),
+        {"mode": "energy", "energy": 50, "layers": "mlp", "finetune": False},
+    )
+
+    assert jobs.calls[-1]["status"] == "succeeded"
+    assert jobs.calls[-1]["result"]["metrics"]["Layers factorized"].startswith("0 of 0")
+
+
+def test_keras_sequential_svd_rebuilds_a_real_runnable_model(tmp_path: Path) -> None:
+    tf = pytest.importorskip("tensorflow")
+
+    keras_model = tf.keras.Sequential([tf.keras.layers.Dense(32, input_shape=(32,))])
+    local_path = tmp_path / "model.h5"
+    keras_model.save(str(local_path))
+
+    model = model_record(filename="model.h5", model_format="keras")
+    jobs, events, s3 = _run_svd(
+        model, local_path.read_bytes(),
+        {"mode": "energy", "energy": 80, "layers": "mlp", "finetune": False},
+    )
+
+    assert jobs.calls[-1]["status"] == "succeeded"
+    assert any(e.stage == "Decomposing layers" for e in events.events)
+
+    output_bytes = next(iter(s3.uploaded.values()))
+    output_path = tmp_path / "output.h5"
+    output_path.write_bytes(output_bytes)
+    rebuilt = tf.keras.models.load_model(str(output_path), compile=False, safe_mode=True)
+
+    dense_layers = [layer for layer in rebuilt.layers if isinstance(layer, tf.keras.layers.Dense)]
+    assert len(dense_layers) == 2  # one Dense split into two smaller ones
+
+    x = np.random.default_rng(0).standard_normal((1, 32)).astype(np.float32)
+    y = rebuilt.predict(x, verbose=0)
+    assert y.shape == (1, 32)
+
+
+def test_keras_functional_non_sequential_svd_fails_cleanly_as_unsupported(
+    tmp_path: Path,
+) -> None:
+    tf = pytest.importorskip("tensorflow")
+
+    inputs = tf.keras.Input(shape=(16,))
+    branch_a = tf.keras.layers.Dense(16)(inputs)
+    branch_b = tf.keras.layers.Dense(16)(inputs)
+    outputs = tf.keras.layers.Add()([branch_a, branch_b])
+    keras_model = tf.keras.Model(inputs, outputs)
+    local_path = tmp_path / "model.h5"
+    keras_model.save(str(local_path))
+
+    model = model_record(filename="model.h5", model_format="keras")
+    jobs, _, _ = _run_svd(
+        model, local_path.read_bytes(),
+        {"mode": "energy", "energy": 80, "layers": "mlp", "finetune": False},
     )
 
     assert jobs.calls[-1]["status"] == "failed"

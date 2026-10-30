@@ -3,25 +3,32 @@ tensor-level truncated SVD / Tucker-2 / CP factorization, per-layer rank/param-s
 bookkeeping, and the download -> decompose -> [fine-tune] -> measure -> upload ->
 job-status runner both ops share.
 
-Both ops factor individual weight tensors directly inside a `torch` state_dict or raw
-`safetensors` weights — swapping one big tensor for two (SVD) or a core-plus-factors
-group (Tucker-2/CP) under suffixed keys — rather than performing graph surgery on a
-running `nn.Module`. That is a genuine, measurable parameter/file-size reduction for
-these two name->tensor formats (the same class of real effect `prune_magnitude.py`'s
-`torch` sparse-tensor path gets for free from a native sparse type), but the result is a
-state dict only an architecture written to expect the new suffixed keys could load back
-into a forward pass — the same category of limitation `prune_structured.py`'s module
-docstring documents for formats with no traceable graph. ONNX (rewiring Gemm/MatMul
-nodes) and Keras (rebuilding `Dense`/`Conv2D` layers at new shapes) would need real
-graph/model surgery neither op performs yet, so both raise `UnsupportedFormatError` for
-those formats — failing the job cleanly with `unsupported_operator` rather than quietly
-producing a same-shape file with no actual size reduction. Documented as a known gap in
-`docs/PROGRESS.md`'s Day 16 entry.
+Four source formats, four real decomposition strategies:
 
-Fine-tuning (`params["finetune"]`) is NOT wired for either op, for the same reason
-`prune_magnitude.py` documents: a bare `torch` state_dict or raw `safetensors` weights
-carry no runnable architecture for PyTorch autograd to fine-tune through.
-`finetune=true` degrades to a clean, noted skip rather than failing the job.
+- `torch`/`safetensors` (this module): factor weight tensors directly inside the plain
+  `name -> tensor` dict — no architecture needed, swapping one big tensor for two (SVD)
+  or a core-plus-factors group (Tucker-2/CP) under suffixed keys. A genuine, measurable
+  parameter/file-size reduction, but the result is a state dict only an architecture
+  written to expect the new suffixed keys could load back into a forward pass.
+- `onnx` (`_lowrank_onnx.py`): real graph surgery — a `Gemm`/`MatMul` node is replaced
+  by two chained `MatMul`s (SVD), a `Conv` node by a chain of smaller `Conv`s (Tucker-2:
+  1x1 -> kxk -> 1x1; CP: 1x1 -> depthwise-kh -> depthwise-kw -> 1x1, via the `group`
+  attribute). The rewritten graph is runnable as-is through `onnxruntime` — no matching
+  architecture needed on the other end, unlike the torch/safetensors path above.
+- `keras` (`_lowrank_keras.py`): real `tf.keras.Model` surgery — a `Dense`/`Conv2D`
+  layer is replaced by a chain of smaller layers via the Functional API, re-run through
+  the model's existing layer graph. Scoped to `tf.keras.Sequential` models (and
+  Functional models that are a simple linear chain): a model with branching/skip
+  connections needs each branch's input wiring threaded through individually, which
+  isn't implemented — raises `UnsupportedFormatError` for those rather than silently
+  mis-wiring a branch.
+
+Fine-tuning (`params["finetune"]`) is NOT wired for `torch`/`safetensors` (no runnable
+architecture for PyTorch autograd, the same constraint `prune_magnitude.py` documents)
+but IS available for `onnx`/`keras` would need a training loop built around
+`onnxruntime-training`/a Keras `fit()` call respectively — out of scope for this op
+(`workers/core/train.py`'s loop is PyTorch-only). `finetune=true` always degrades to a
+clean, noted skip rather than failing the job.
 """
 
 from __future__ import annotations
@@ -44,8 +51,6 @@ from core.exceptions import JobCanceledError, JobTimeoutError, SpotInterruptedEr
 from ._convert_common import UnsupportedFormatError, s3_client
 from ._prune_common import input_suffix, load_raw_tensors
 from ._prune_common import save_raw_tensors as _save_raw_tensors_generic
-
-_RAW_TENSOR_FORMATS = ("torch", "safetensors")
 
 _ATTENTION_NAME_HINTS = (
     "attn", "attention", "q_proj", "k_proj", "v_proj", "out_proj",
@@ -94,15 +99,6 @@ def save_tensors(
         save_file(tensors, str(path_out))
         return
     _save_raw_tensors_generic(path_in, path_out, model_format, tensors)
-
-
-def require_raw_tensor_format(model_format: str, technique_label: str) -> None:
-    if model_format not in _RAW_TENSOR_FORMATS:
-        raise UnsupportedFormatError(
-            f"{technique_label} needs real graph/model surgery for {model_format!r}, which "
-            "isn't implemented yet — only torch and safetensors (plain name->tensor weights) "
-            "are supported (see _lowrank_common.py's module docstring)"
-        )
 
 
 # -------------------------------------------------------------------------------- SVD
@@ -285,9 +281,39 @@ def apply_tucker_to_tensors(
 # --------------------------------------------------------------------------- job runner
 
 
-DecomposeFn = Callable[
+TensorDecomposeFn = Callable[
     [dict[str, np.ndarray], dict[str, Any]], tuple[dict[str, np.ndarray], list[dict[str, Any]]]
 ]
+# Kept as an alias for existing callers/tests written against the pre-ONNX/Keras shape.
+DecomposeFn = TensorDecomposeFn
+
+OnnxDecomposeFn = Callable[[Any, dict[str, Any]], tuple[Any, list[dict[str, Any]]]]
+# onnx_decompose_fn(model: onnx.ModelProto, params) -> (new_model, layer_reports)
+
+KerasDecomposeFn = Callable[[Any, dict[str, Any]], tuple[Any, list[dict[str, Any]]]]
+# keras_decompose_fn(model: tf.keras.Model, params) -> (new_model, layer_reports)
+
+
+def _load_onnx(path: Path) -> Any:
+    import onnx
+
+    return onnx.load(str(path))
+
+
+def _save_onnx(model: Any, path: Path) -> None:
+    import onnx
+
+    onnx.save(model, str(path))
+
+
+def _load_keras(path: Path) -> Any:
+    import tensorflow as tf
+
+    return tf.keras.models.load_model(str(path), compile=False, safe_mode=True)
+
+
+def _save_keras(model: Any, path: Path) -> None:
+    model.save(str(path))
 
 
 def run_lowrank_op(
@@ -299,7 +325,9 @@ def run_lowrank_op(
     operation: OperationSpec,
     control: Any,
     event_repo: JobEventRepository,
-    decompose_fn: DecomposeFn,
+    tensor_decompose_fn: TensorDecomposeFn,
+    onnx_decompose_fn: OnnxDecomposeFn,
+    keras_decompose_fn: KerasDecomposeFn,
     download_name_tag: str,
     job_repo: JobRepository | None = None,
     models_repo: ModelRepository | None = None,
@@ -317,16 +345,46 @@ def run_lowrank_op(
             Path(tmpdir), user_id=user_id, job_id=job_id, model_id=model_id, params=params,
             control=control, event_repo=event_repo, jobs=jobs, models=models, s3=s3,
             uploads_bucket=uploads_bucket, results_bucket=results_bucket,
-            decompose_fn=decompose_fn, download_name_tag=download_name_tag,
+            tensor_decompose_fn=tensor_decompose_fn, onnx_decompose_fn=onnx_decompose_fn,
+            keras_decompose_fn=keras_decompose_fn, download_name_tag=download_name_tag,
         )
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
 
 
+def _decompose(
+    model_format: str, local_in: Path, params: dict[str, Any], *,
+    tensor_decompose_fn: TensorDecomposeFn, onnx_decompose_fn: OnnxDecomposeFn,
+    keras_decompose_fn: KerasDecomposeFn,
+) -> tuple[Any, list[dict[str, Any]]]:
+    if model_format in ("torch", "safetensors"):
+        tensors = load_raw_tensors(local_in, model_format)
+        return tensor_decompose_fn(tensors, params)
+    if model_format == "onnx":
+        return onnx_decompose_fn(_load_onnx(local_in), params)
+    if model_format == "keras":
+        return keras_decompose_fn(_load_keras(local_in), params)
+    raise UnsupportedFormatError(f"low-rank factorization has no path for format {model_format!r}")
+
+
+def _save_decomposed(model_format: str, local_in: Path, local_out: Path, result: Any) -> None:
+    if model_format in ("torch", "safetensors"):
+        save_tensors(local_in, local_out, model_format, result)
+        return
+    if model_format == "onnx":
+        _save_onnx(result, local_out)
+        return
+    if model_format == "keras":
+        _save_keras(result, local_out)
+        return
+    raise UnsupportedFormatError(f"low-rank factorization has no path for format {model_format!r}")
+
+
 def _run_in_tempdir(
     tmpdir: Path, *, user_id: str, job_id: str, model_id: str, params: dict[str, Any],
     control: Any, event_repo: JobEventRepository, jobs: JobRepository, models: ModelRepository,
-    s3: Any, uploads_bucket: str, results_bucket: str, decompose_fn: DecomposeFn,
+    s3: Any, uploads_bucket: str, results_bucket: str, tensor_decompose_fn: TensorDecomposeFn,
+    onnx_decompose_fn: OnnxDecomposeFn, keras_decompose_fn: KerasDecomposeFn,
     download_name_tag: str,
 ) -> None:
     model = models.get(user_id, model_id)
@@ -343,11 +401,12 @@ def _run_in_tempdir(
         user_id, job_id, stage="Decomposing layers", message="Factorizing weight tensors"
     )
     try:
-        require_raw_tensor_format(model.format, "low-rank factorization")
-        tensors = load_raw_tensors(local_in, model.format)
         bytes_before = local_in.stat().st_size
-        new_tensors, layer_reports = decompose_fn(tensors, params)
-        save_tensors(local_in, local_out, model.format, new_tensors)
+        result, layer_reports = _decompose(
+            model.format, local_in, params, tensor_decompose_fn=tensor_decompose_fn,
+            onnx_decompose_fn=onnx_decompose_fn, keras_decompose_fn=keras_decompose_fn,
+        )
+        _save_decomposed(model.format, local_in, local_out, result)
     except (JobCanceledError, JobTimeoutError, SpotInterruptedError):
         raise
     except Exception as error:  # noqa: BLE001 — classify framework failures for the UI
@@ -361,7 +420,10 @@ def _run_in_tempdir(
 
     skip_reason: str | None = None
     if params.get("finetune"):
-        skip_reason = "fine-tuning needs a runnable architecture; not available for this format"
+        skip_reason = (
+            "fine-tuning isn't wired for low-rank factorization yet "
+            "(see _lowrank_common.py's module docstring)"
+        )
     control.check()
 
     event_repo.append(
@@ -411,6 +473,9 @@ def _run_in_tempdir(
 
 __all__ = [
     "DecomposeFn",
+    "KerasDecomposeFn",
+    "OnnxDecomposeFn",
+    "TensorDecomposeFn",
     "apply_svd_to_tensors",
     "apply_tucker_to_tensors",
     "choose_channel_rank",
@@ -421,7 +486,6 @@ __all__ = [
     "is_attention_name",
     "is_conv_weight",
     "is_linear_weight",
-    "require_raw_tensor_format",
     "run_lowrank_op",
     "save_tensors",
 ]

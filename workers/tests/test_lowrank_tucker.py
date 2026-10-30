@@ -173,13 +173,49 @@ def test_small_rank_layer_skipped_when_no_param_saving(tmp_path: Path) -> None:
     assert "conv1.weight" in unchanged
 
 
-def test_keras_source_fails_cleanly_as_unsupported(tmp_path: Path) -> None:
-    pytest.importorskip("tensorflow")
-    import tensorflow as tf
+def test_keras_sequential_tucker2_rebuilds_a_real_runnable_model(tmp_path: Path) -> None:
+    pytest.importorskip("tensorly")
+    tf = pytest.importorskip("tensorflow")
 
     keras_model = tf.keras.Sequential(
-        [tf.keras.layers.Conv2D(4, 3, input_shape=(8, 8, 4))]
+        [tf.keras.layers.Conv2D(16, 3, padding="same", input_shape=(8, 8, 16))]
     )
+    local_path = tmp_path / "model.h5"
+    keras_model.save(str(local_path))
+
+    model = model_record(filename="model.h5", model_format="keras")
+    jobs, events, s3 = _run_tucker(
+        model, local_path.read_bytes(), {"kind": "tucker2", "rank": 75, "finetune": False}
+    )
+
+    assert jobs.calls[-1]["status"] == "succeeded"
+    assert any(e.stage == "Decomposing layers" for e in events.events)
+    metrics = jobs.calls[-1]["result"]["metrics"]
+    assert "1 of 1" in metrics["Layers factorized"]
+
+    output_bytes = next(iter(s3.uploaded.values()))
+    output_path = tmp_path / "output.h5"
+    output_path.write_bytes(output_bytes)
+    rebuilt = tf.keras.models.load_model(str(output_path), compile=False, safe_mode=True)
+
+    # 3 real Conv2D layers now (pointwise -> core -> pointwise), a genuinely different,
+    # runnable model, not just a same-shape estimate.
+    conv_layers = [layer for layer in rebuilt.layers if isinstance(layer, tf.keras.layers.Conv2D)]
+    assert len(conv_layers) == 3
+
+    x = np.random.default_rng(0).standard_normal((1, 8, 8, 16)).astype(np.float32)
+    y = rebuilt.predict(x, verbose=0)
+    assert y.shape == (1, 8, 8, 16)  # "same" padding preserved through the split chain
+
+
+def test_keras_functional_non_sequential_fails_cleanly_as_unsupported(tmp_path: Path) -> None:
+    tf = pytest.importorskip("tensorflow")
+
+    inputs = tf.keras.Input(shape=(8, 8, 4))
+    branch_a = tf.keras.layers.Conv2D(4, 3, padding="same")(inputs)
+    branch_b = tf.keras.layers.Conv2D(4, 3, padding="same")(inputs)
+    outputs = tf.keras.layers.Add()([branch_a, branch_b])
+    keras_model = tf.keras.Model(inputs, outputs)
     local_path = tmp_path / "model.h5"
     keras_model.save(str(local_path))
 
@@ -190,3 +226,117 @@ def test_keras_source_fails_cleanly_as_unsupported(tmp_path: Path) -> None:
 
     assert jobs.calls[-1]["status"] == "failed"
     assert jobs.calls[-1]["error"]["code"] == "unsupported_operator"
+
+
+def test_onnx_conv_tucker2_rewrite_runs_through_onnxruntime(tmp_path: Path) -> None:
+    pytest.importorskip("tensorly")
+    onnx = pytest.importorskip("onnx")
+    ort = pytest.importorskip("onnxruntime")
+    from onnx import TensorProto, helper, numpy_helper
+
+    kernel_np = _low_rank_conv_kernel(16, 16, 3, 3, true_rank=4)
+    weight_init = numpy_helper.from_array(kernel_np.astype(np.float32), "conv1.weight")
+    node = helper.make_node(
+        "Conv", ["x", "conv1.weight"], ["y"], pads=[1, 1, 1, 1], strides=[1, 1],
+        dilations=[1, 1], group=1, name="conv1",
+    )
+    graph = helper.make_graph(
+        [node], "g",
+        [helper.make_tensor_value_info("x", TensorProto.FLOAT, [1, 16, 8, 8])],
+        [helper.make_tensor_value_info("y", TensorProto.FLOAT, [1, 16, 8, 8])],
+        initializer=[weight_init],
+    )
+    model_proto = helper.make_model(graph, opset_imports=[helper.make_opsetid("", 18)])
+    model_proto.ir_version = 9  # pin below onnxruntime's max supported IR in this sandbox
+    local_path = tmp_path / "model.onnx"
+    onnx.save(model_proto, str(local_path))
+
+    model = model_record(filename="model.onnx", model_format="onnx")
+    jobs, _, s3 = _run_tucker(
+        model, local_path.read_bytes(), {"kind": "tucker2", "rank": 75, "finetune": False}
+    )
+
+    assert jobs.calls[-1]["status"] == "succeeded"
+    output_bytes = next(iter(s3.uploaded.values()))
+    output_path = tmp_path / "output.onnx"
+    output_path.write_bytes(output_bytes)
+    assert output_path.stat().st_size < local_path.stat().st_size
+
+    session = ort.InferenceSession(str(output_path))
+    rng = np.random.default_rng(1)
+    x = rng.standard_normal((1, 16, 8, 8)).astype(np.float32)
+    (y,) = session.run(None, {"x": x})
+    assert y.shape == (1, 16, 8, 8)
+
+
+def test_onnx_conv_cp_rewrite_runs_through_onnxruntime(tmp_path: Path) -> None:
+    pytest.importorskip("tensorly")
+    onnx = pytest.importorskip("onnx")
+    ort = pytest.importorskip("onnxruntime")
+    from onnx import TensorProto, helper, numpy_helper
+
+    kernel_np = _low_rank_cp_conv_kernel(8, 8, 3, 3, true_rank=3)
+    weight_init = numpy_helper.from_array(kernel_np.astype(np.float32), "conv1.weight")
+    node = helper.make_node(
+        "Conv", ["x", "conv1.weight"], ["y"], pads=[1, 1, 1, 1], strides=[1, 1],
+        dilations=[1, 1], group=1, name="conv1",
+    )
+    graph = helper.make_graph(
+        [node], "g",
+        [helper.make_tensor_value_info("x", TensorProto.FLOAT, [1, 8, 8, 8])],
+        [helper.make_tensor_value_info("y", TensorProto.FLOAT, [1, 8, 8, 8])],
+        initializer=[weight_init],
+    )
+    model_proto = helper.make_model(graph, opset_imports=[helper.make_opsetid("", 18)])
+    model_proto.ir_version = 9
+    local_path = tmp_path / "model.onnx"
+    onnx.save(model_proto, str(local_path))
+
+    model = model_record(filename="model.onnx", model_format="onnx")
+    jobs, _, s3 = _run_tucker(
+        model, local_path.read_bytes(), {"kind": "cp", "rank": 75, "finetune": False}
+    )
+
+    assert jobs.calls[-1]["status"] == "succeeded"
+    output_bytes = next(iter(s3.uploaded.values()))
+    output_path = tmp_path / "output.onnx"
+    output_path.write_bytes(output_bytes)
+    assert output_path.stat().st_size < local_path.stat().st_size
+
+    session = ort.InferenceSession(str(output_path))
+    rng = np.random.default_rng(2)
+    x = rng.standard_normal((1, 8, 8, 8)).astype(np.float32)
+    (y,) = session.run(None, {"x": x})
+    assert y.shape == (1, 8, 8, 8)
+
+
+def test_keras_sequential_cp_rebuilds_a_real_runnable_model(tmp_path: Path) -> None:
+    pytest.importorskip("tensorly")
+    tf = pytest.importorskip("tensorflow")
+
+    keras_model = tf.keras.Sequential(
+        [tf.keras.layers.Conv2D(8, 3, padding="same", input_shape=(8, 8, 8))]
+    )
+    local_path = tmp_path / "model.h5"
+    keras_model.save(str(local_path))
+
+    model = model_record(filename="model.h5", model_format="keras")
+    jobs, _, s3 = _run_tucker(
+        model, local_path.read_bytes(), {"kind": "cp", "rank": 75, "finetune": False}
+    )
+
+    assert jobs.calls[-1]["status"] == "succeeded"
+    metrics = jobs.calls[-1]["result"]["metrics"]
+    assert "1 of 1" in metrics["Layers factorized"]
+
+    output_bytes = next(iter(s3.uploaded.values()))
+    output_path = tmp_path / "output.h5"
+    output_path.write_bytes(output_bytes)
+    rebuilt = tf.keras.models.load_model(str(output_path), compile=False, safe_mode=True)
+
+    conv_layers = [layer for layer in rebuilt.layers if isinstance(layer, tf.keras.layers.Conv2D)]
+    assert len(conv_layers) == 4  # pointwise -> depthwise-kh -> depthwise-kw -> pointwise
+
+    x = np.random.default_rng(3).standard_normal((1, 8, 8, 8)).astype(np.float32)
+    y = rebuilt.predict(x, verbose=0)
+    assert y.shape == (1, 8, 8, 8)
