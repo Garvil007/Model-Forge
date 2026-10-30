@@ -32,7 +32,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8", "ruff>=0.6", "mypy>=1.11",
-    "modelforge-workers[torch-ops,tf-ops,convert-ops,llm-ops,gpu-ops]",
+    "modelforge-workers[torch-ops,tf-ops,convert-ops,llm-ops,gpu-ops,tensorrt-ops]",
 ]
 # torch-pruning (p_structured's YOLO path) traces a real nn.Module graph with
 # torch-pruning's own tp.pruner.MagnitudePruner/importance scorers. tensorly
@@ -64,6 +64,8 @@ convert-ops = [
     # onnx2tf's SavedModel output needs its "tf_converter" backend, which needs this
     # optional Keras-2-compat package even though the rest of this image is Keras 3.
     "tf_keras>=2.21",
+    # c_coreml (convert_coreml.py): pure-Python, no CUDA coupling, fits this CPU extra.
+    "coremltools>=8.0",
 ]
 # q_gguf/c_gguf (workers/ops/quantize_gguf.py, convert_gguf.py): llama.cpp's own
 # convert_hf_to_gguf.py needs torch + sentencepiece + protobuf + the gguf package to
@@ -76,6 +78,11 @@ llm-ops = ["torch>=2.2", "sentencepiece>=0.2", "protobuf>=4.25", "gguf>=0.10"]
 # (WikiText-2/C4 calibration). Installable and testable on CPU (MF_LLM_DEVICE=cpu) even
 # though the real gpu-base image runs these on CUDA — see _llm_gpu_common.py.
 gpu-ops = ["torch>=2.2", "llmcompressor>=0.3", "bitsandbytes>=0.45", "accelerate>=1.0", "datasets>=2.20"]
+# c_tensorrt (convert_tensorrt.py): TensorRT itself comes from the tensorrt worker image's
+# NVIDIA base (system site-packages), not this extra — it isn't pip-installable without a
+# matching CUDA/cuDNN runtime already present. This extra only covers what IS a plain pip
+# install: cuda-python for device buffer alloc/copy, plus the YOLO->ONNX hop's dependency.
+tensorrt-ops = ["cuda-python>=12.5", "ultralytics>=8.4"]
 
 [tool.setuptools.packages.find]
 where = ["."]

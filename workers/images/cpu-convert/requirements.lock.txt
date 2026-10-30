@@ -1,7 +1,7 @@
 # Pinned, hash-free lock for the cpu-convert worker image: backs every Convert-tab op
-# (c_onnx, c_tflite, c_torchscript, c_savedmodel, c_safetensors, c_openvino) except
-# TensorRT and Core ML, per `packages/catalog/src/modelforge_catalog/converts.py`'s
-# `worker_image="cpu-convert"` on those six OperationSpecs. A single combined image is
+# except TensorRT (c_onnx, c_tflite, c_torchscript, c_savedmodel, c_safetensors,
+# c_openvino, c_coreml), per `packages/catalog/src/modelforge_catalog/converts.py`'s
+# `worker_image="cpu-convert"` on those seven OperationSpecs. A single combined image is
 # used (instead of splitting across cpu-torch/cpu-tf) because several of these ops need
 # both frameworks within one job — e.g. c_tflite's torch-sourced... actually no torch-
 # sourced chain is implemented (see workers/ops/convert_tflite.py's docstring for why), but
@@ -136,6 +136,12 @@ ast_serialize==0.13.0
 backports.strenum==1.2.8
 click==8.5.0
 librt==0.16.0
+
+# -- coremltools (c_coreml) --
+# Hand-added after this file's last real resolve (see header date) — coremltools is a
+# pure-Python package with no CUDA/TF-version coupling, so it's safe to append without a
+# full re-resolve, but regenerate properly before trusting this file's transitive pins.
+coremltools==8.2
 
 # -- shared transitive deps --
 numpy==2.2.6

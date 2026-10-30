@@ -2,8 +2,9 @@
 # bitsandbytes (NF4), accelerate, datasets (WikiText-2/C4 calibration). Backs q_gptq,
 # q_awq and q_nf4 — the catalog's existing `worker_image="gpu-base"`/`queue="gpu"`
 # entries (`packages/catalog/src/modelforge_catalog/methods.py`), the same name Day 11's
-# notes already flagged as a placeholder pending a real image. Also the eventual home for
-# p_wanda/d_logit/d_feature/d_llm/c_tensorrt (Days 15-18), not built here.
+# notes already flagged as a placeholder pending a real image. c_tensorrt is NOT backed by
+# this image — it gets its own `tensorrt` image (see workers/images/tensorrt/Dockerfile)
+# so TensorRT's large CUDA wheel doesn't slow down every q_gptq/q_awq/q_nf4 job's pull.
 #
 # Build from the repo root (needs packages/catalog, packages/db and workers/):
 #   docker build -f workers/images/gpu-base/Dockerfile -t modelforge/gpu-base:dev .

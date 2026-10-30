@@ -1,7 +1,9 @@
 # cpu-convert worker image: PyTorch CPU + TensorFlow + OpenVINO/NNCF + onnx2tf/onnx2torch/
-# tf2onnx + Optimum + Ultralytics. Backs the Convert tab's c_onnx, c_tflite,
-# c_torchscript, c_savedmodel, c_safetensors and c_openvino jobs (everything except
-# TensorRT and Core ML) — a single combined image rather than splitting across
+# tf2onnx + Optimum + Ultralytics + coremltools. Backs the Convert tab's c_onnx, c_tflite,
+# c_torchscript, c_savedmodel, c_safetensors, c_openvino and c_coreml jobs (everything
+# except TensorRT, which gets its own `tensorrt` image — see workers/images/tensorrt/
+# Dockerfile — so its much larger CUDA-based size doesn't slow down every other convert
+# job's pull/cold-start) — a single combined image rather than splitting across
 # cpu-torch/cpu-tf because several of these ops need both frameworks within one job (see
 # requirements.lock.txt's header for why).
 #

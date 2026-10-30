@@ -178,7 +178,7 @@ CONVERTS: tuple[OperationSpec, ...] = (
         ),
         size_estimate=lambda m, v: m.size
         * ({"fp32": 32, "fp16": 16, "int8": 8.5}[v["precision"]] / m.bits),
-        worker_image="gpu-base",
+        worker_image="tensorrt",
         queue="gpu",
     ),
     OperationSpec(
@@ -198,5 +198,6 @@ CONVERTS: tuple[OperationSpec, ...] = (
             ),
         ),
         size_estimate=lambda m, v: m.size * ((16 if v["precision"] == "fp16" else 32) / m.bits),
+        worker_image="cpu-convert",
     ),
 )

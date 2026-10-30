@@ -1,0 +1,46 @@
+# Pinned, hash-free lock for the tensorrt worker image: cuda-python (device buffer
+# alloc/copy for workers/ops/convert_tensorrt.py's engine-execution validation),
+# onnxruntime (CPU) for the accuracy-check comparison and ONNX input introspection,
+# Ultralytics for the YOLO->ONNX hop, plus modelforge-workers' own base deps. TensorRT
+# itself, CUDA and cuDNN come from the `nvcr.io/nvidia/tensorrt:24.08-py3` base image
+# (system site-packages, via `python3 -m venv --system-site-packages` in the Dockerfile)
+# rather than a pip wheel, since that base already ships a build matched to its CUDA/cuDNN
+# runtime.
+#
+# NOT YET regenerated from a real resolved install (no Docker daemon, no GPU, in this
+# environment — same limitation every other image's lock file documents). Versions are
+# hand-pinned to match the sibling images' dates/ranges, not `pip`-resolved. Regenerate
+# with `pip install -e workers[tensorrt-ops]` inside a container built from the base image
+# above before trusting this file for a real build.
+
+cuda-python==12.6.0
+onnx==1.20.1
+onnxruntime==1.26.0
+onnxconverter-common==1.16.0
+ultralytics==8.4.4
+boto3==1.43.114
+botocore==1.43.114
+s3transfer==0.19.2
+jmespath==1.1.0
+safetensors==0.8.0
+huggingface-hub==2.2.0
+hf-xet==1.7.0
+pillow==13.0.0
+pycocotools==2.0.11
+
+# -- shared transitive deps --
+numpy==2.2.6
+flatbuffers==25.12.19
+packaging==26.3
+typing_extensions==4.16.0
+requests==2.34.2
+urllib3==2.8.0
+certifi==2026.7.22
+charset-normalizer==3.5.2
+idna==3.20
+PyYAML==6.0.3
+tqdm==4.67.1
+filelock==4.2.0
+fsspec==2026.9.0
+python-dateutil==2.9.0.post0
+six==1.17.0
