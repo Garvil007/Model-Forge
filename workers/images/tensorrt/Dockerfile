@@ -17,7 +17,10 @@
 
 FROM nvcr.io/nvidia/tensorrt:24.08-py3 AS builder
 
-WORKDIR /build
+# WORKDIR matches the final stage's COPY destination (/app) deliberately: `pip install
+# -e` records this absolute path in the venv's .pth files, so the editable install only
+# resolves in the final image if the source ends up at the exact same path there too.
+WORKDIR /app
 RUN python3 -m venv /opt/venv --system-site-packages
 ENV PATH="/opt/venv/bin:$PATH"
 
@@ -37,8 +40,8 @@ FROM nvcr.io/nvidia/tensorrt:24.08-py3 AS final
 RUN groupadd --system modelforge && useradd --system --gid modelforge --create-home modelforge
 
 COPY --from=builder /opt/venv /opt/venv
-COPY --from=builder /build/packages /app/packages
-COPY --from=builder /build/workers /app/workers
+COPY --from=builder /app/packages /app/packages
+COPY --from=builder /app/workers /app/workers
 
 ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \

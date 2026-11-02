@@ -30,7 +30,10 @@ RUN cmake -B build -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF \
 
 FROM python:3.12-slim AS python-builder
 
-WORKDIR /build
+# WORKDIR matches the final stage's COPY destination (/app) deliberately: `pip install
+# -e` records this absolute path in the venv's .pth files, so the editable install only
+# resolves in the final image if the source ends up at the exact same path there too.
+WORKDIR /app
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
@@ -56,8 +59,8 @@ COPY --from=llama-cpp-builder /opt/llama.cpp/build/bin/llama-perplexity /opt/lla
 COPY --from=llama-cpp-builder /opt/llama.cpp/convert_hf_to_gguf.py /opt/llama.cpp/convert_hf_to_gguf.py
 COPY --from=llama-cpp-builder /opt/llama.cpp/gguf-py /opt/llama.cpp/gguf-py
 COPY --from=python-builder /opt/venv /opt/venv
-COPY --from=python-builder /build/packages /app/packages
-COPY --from=python-builder /build/workers /app/workers
+COPY --from=python-builder /app/packages /app/packages
+COPY --from=python-builder /app/workers /app/workers
 
 ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \

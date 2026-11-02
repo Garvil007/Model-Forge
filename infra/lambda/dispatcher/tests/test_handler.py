@@ -38,7 +38,7 @@ def test_submits_once_for_a_queued_job(monkeypatch):
     batch_client.submit_job.assert_called_once()
     args, kwargs = batch_client.submit_job.call_args
     assert args[0] == "job-1"
-    assert args[1] == "cpu-base-job-def"
+    assert args[1] == "cpu-torch-job-def"
     assert args[2] == "cpu-queue"
     assert kwargs["message_body"] == body
     jobs.set_batch_job_id.assert_called_once_with("user-1", "job-1", "batch-123")
@@ -65,6 +65,26 @@ def test_canceled_before_dispatch_is_skipped(monkeypatch):
     handler(_event(_message()))
 
     batch_client.submit_job.assert_not_called()
+
+
+def test_submit_failure_marks_the_job_failed_not_stuck_queued(monkeypatch):
+    jobs = _fake_jobs("queued")
+    batch_client = MagicMock()
+    batch_client.submit_job.side_effect = RuntimeError("AccessDeniedException")
+    monkeypatch.setattr("dispatcher.handler.JobRepository", lambda: jobs)
+    monkeypatch.setattr("dispatcher.handler.get_batch_client", lambda: batch_client)
+
+    result = handler(_event(_message()))
+
+    assert result == {"processed": 1}
+    jobs.update_progress.assert_called_once_with(
+        "user-1",
+        "job-1",
+        status="failed",
+        progress_percent=0,
+        error={"code": "unknown", "message": "dispatch failed: AccessDeniedException"},
+    )
+    jobs.set_batch_job_id.assert_not_called()
 
 
 def test_multi_record_event_processes_all_records(monkeypatch):

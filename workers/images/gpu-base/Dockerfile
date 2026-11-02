@@ -20,7 +20,10 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends python3.12 python3.12-venv python3-pip \
  && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /build
+# WORKDIR matches the final stage's COPY destination (/app) deliberately: `pip install
+# -e` records this absolute path in the venv's .pth files, so the editable install only
+# resolves in the final image if the source ends up at the exact same path there too.
+WORKDIR /app
 RUN python3.12 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
@@ -44,8 +47,8 @@ RUN apt-get update \
  && groupadd --system modelforge && useradd --system --gid modelforge --create-home modelforge
 
 COPY --from=builder /opt/venv /opt/venv
-COPY --from=builder /build/packages /app/packages
-COPY --from=builder /build/workers /app/workers
+COPY --from=builder /app/packages /app/packages
+COPY --from=builder /app/workers /app/workers
 
 ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \

@@ -4,7 +4,11 @@
     "allowedHeaders": ["*"],
     "exposeHeaders": ["ETag"],
     "maxAgeSeconds": 3000,
-    "devOrigins": ["http://localhost:5173", "http://localhost:4173"]
+    "devOrigins": [
+      "http://localhost:5173",
+      "http://localhost:4173",
+      "https://d2ozjxxhkp5644.cloudfront.net"
+    ]
   },
   "lifecycle": {
     "abortIncompleteMultipartUploadDays": 1,

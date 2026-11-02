@@ -11,7 +11,10 @@
 
 FROM python:3.12-slim AS builder
 
-WORKDIR /build
+# WORKDIR matches the final stage's COPY destination (/app) deliberately: `pip install
+# -e` records this absolute path in the venv's .pth files, so the editable install only
+# resolves in the final image if the source ends up at the exact same path there too.
+WORKDIR /app
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
@@ -31,8 +34,8 @@ FROM python:3.12-slim AS final
 
 RUN groupadd --system modelforge && useradd --system --gid modelforge --create-home modelforge
 COPY --from=builder /opt/venv /opt/venv
-COPY --from=builder /build/packages /app/packages
-COPY --from=builder /build/workers /app/workers
+COPY --from=builder /app/packages /app/packages
+COPY --from=builder /app/workers /app/workers
 
 ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \

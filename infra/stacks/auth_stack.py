@@ -51,7 +51,7 @@ class AuthStack(Stack):
         super().__init__(scope, construct_id, **kwargs)
         region = Stack.of(self).region
 
-        user_pool = cognito.UserPool(
+        self.user_pool = user_pool = cognito.UserPool(
             self,
             "UserPool",
             user_pool_name=f"modelforge-{env_name}",
@@ -85,7 +85,7 @@ class AuthStack(Stack):
         if google_idp is not None:
             supported_idps.append(cognito.UserPoolClientIdentityProvider.GOOGLE)
 
-        client = user_pool.add_client(
+        self.web_client = client = user_pool.add_client(
             "WebClient",
             user_pool_client_name=f"modelforge-web-{env_name}",
             generate_secret=False,

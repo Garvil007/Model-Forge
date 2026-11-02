@@ -381,24 +381,42 @@ def run_job(
 
 
 if __name__ == "__main__":
+    import sys
+
     from . import consumer
 
-    _system_queue = os.environ.get("MF_SYSTEM_JOBS_QUEUE_URL")
-    _cpu_queue = os.environ.get("MF_CPU_JOBS_QUEUE_URL")
-    _gpu_queue = os.environ.get("MF_GPU_JOBS_QUEUE_URL")
-
-    _configured = [
-        (_system_queue, consumer.handle_message),
-        (_cpu_queue, consumer.handle_job_message),
-        (_gpu_queue, consumer.handle_job_message),
-    ]
-    _active = [(url, handler) for url, handler in _configured if url]
-    if len(_active) != 1:
-        print(
-            "modelforge-workers: exactly one of MF_SYSTEM_JOBS_QUEUE_URL / "
-            "MF_CPU_JOBS_QUEUE_URL / MF_GPU_JOBS_QUEUE_URL must be set; "
-            f"found {len(_active)}."
-        )
+    # One-shot mode: a real AWS Batch job is a single container that runs to
+    # completion and exits — it never polls a queue itself. The dispatcher Lambda
+    # (infra/lambda/dispatcher) submits the original SQS message body as the Batch
+    # job's `message` parameter (see batch_client.RealBatchJobClient.submit_job),
+    # which infra/stacks/batch_stack.py's container COMMAND (not environment —
+    # confirmed live that AWS Batch only resolves `Ref::` placeholders in the
+    # command array, not in environment variable values, which left MF_JOB_MESSAGE
+    # holding the literal unsubstituted string "Ref::message") passes through as
+    # sys.argv[1]. Without this branch, `python -m core.runner` fell through to the
+    # queue-consumer loop below, which exits 0 immediately when none of the three
+    # queue env vars are set — the job record was never touched and the frontend
+    # polled forever.
+    _job_message = sys.argv[1] if len(sys.argv) > 1 else None
+    if _job_message:
+        consumer.handle_job_message(_job_message)
     else:
-        _queue_url, _handler = _active[0]
-        consumer.run_forever(_queue_url, _handler)
+        _system_queue = os.environ.get("MF_SYSTEM_JOBS_QUEUE_URL")
+        _cpu_queue = os.environ.get("MF_CPU_JOBS_QUEUE_URL")
+        _gpu_queue = os.environ.get("MF_GPU_JOBS_QUEUE_URL")
+
+        _configured = [
+            (_system_queue, consumer.handle_message),
+            (_cpu_queue, consumer.handle_job_message),
+            (_gpu_queue, consumer.handle_job_message),
+        ]
+        _active = [(url, handler) for url, handler in _configured if url]
+        if len(_active) != 1:
+            print(
+                "modelforge-workers: exactly one of MF_JOB_MESSAGE / "
+                "MF_SYSTEM_JOBS_QUEUE_URL / MF_CPU_JOBS_QUEUE_URL / "
+                f"MF_GPU_JOBS_QUEUE_URL must be set; found {len(_active)} queue(s)."
+            )
+        else:
+            _queue_url, _handler = _active[0]
+            consumer.run_forever(_queue_url, _handler)

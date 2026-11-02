@@ -55,12 +55,25 @@ def _process_record(body: str, *, jobs: JobRepository, batch_client: Any) -> Non
         )
         return
 
-    batch_job_id = batch_client.submit_job(
-        message.job_id,
-        _job_definition_for(operation.worker_image),
-        _batch_queue_for(operation.queue),
-        message_body=body,
-    )
+    try:
+        batch_job_id = batch_client.submit_job(
+            message.job_id,
+            _job_definition_for(operation.worker_image),
+            _batch_queue_for(operation.queue),
+            message_body=body,
+        )
+    except Exception as error:  # noqa: BLE001 — a submit failure must not leave the job
+        # permanently "queued": that silently locks the user's concurrent-job quota with
+        # no way to retry or cancel it (confirmed live: an IAM/capacity error here left
+        # two jobs stuck at "queued" forever until fixed by hand in DynamoDB).
+        jobs.update_progress(
+            message.user_id,
+            message.job_id,
+            status="failed",
+            progress_percent=0,
+            error={"code": "unknown", "message": f"dispatch failed: {error}"},
+        )
+        return
     jobs.set_batch_job_id(message.user_id, message.job_id, batch_job_id)
 
 

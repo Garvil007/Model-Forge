@@ -35,7 +35,17 @@ class BatchJobClient(Protocol):
 
 
 class RealBatchJobClient:
-    """Submits to real AWS Batch via boto3."""
+    """Submits to real AWS Batch via boto3.
+
+    `message_body` (the original SQS message, a small JSON object — see
+    `modelforge_catalog.job_messages`) is passed through as the Batch job's `message`
+    parameter, which `infra/stacks/batch_stack.py`'s container surfaces as the
+    MF_JOB_MESSAGE env var via a `Ref::message` placeholder. A real Batch job is a
+    single container that runs once and exits — it has no SQS message to read for
+    itself, so this is the only way it learns which job to run. Confirmed live: before
+    this was wired up, `core/runner.py`'s one-shot branch had nothing to read and the
+    container exited 0 immediately without ever touching the job record.
+    """
 
     def __init__(self, client: Any = None) -> None:
         self._client = client if client is not None else _boto3_batch_client()
@@ -43,11 +53,14 @@ class RealBatchJobClient:
     def submit_job(
         self, job_id: str, job_definition: str, queue: str, *, message_body: str | None = None
     ) -> str:
+        parameters = {"jobId": job_id}
+        if message_body is not None:
+            parameters["message"] = message_body
         response = self._client.submit_job(
             jobName=f"job-{job_id}",
             jobQueue=queue,
             jobDefinition=job_definition,
-            parameters={"jobId": job_id},
+            parameters=parameters,
         )
         return response["jobId"]
 
