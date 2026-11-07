@@ -22,6 +22,7 @@ from stacks.api_stack import ApiStack
 from stacks.auth_stack import AuthStack
 from stacks.batch_stack import BatchStack
 from stacks.data_stack import DataStack
+from stacks.github_oidc_stack import GithubOidcStack
 from stacks.network_stack import NetworkStack
 from stacks.web_stack import WebStack
 
@@ -37,6 +38,14 @@ cdk_env = Environment(account=account, region=region)
 domain_prefix = f"modelforge-{env_name}-{account[-6:]}" if account else f"modelforge-{env_name}"
 
 budget_email = os.environ.get("MF_BUDGET_NOTIFICATION_EMAIL", "garvilazure0112@gmail.com")
+
+github_oidc_stack = GithubOidcStack(
+    app,
+    f"ModelForgeGithubOidcStack-{env_name}",
+    env_name=env_name,
+    github_repo=os.environ.get("MF_GITHUB_REPO", "Garvil007/Model-Forge"),
+    env=cdk_env,
+)
 
 network_stack = NetworkStack(app, f"ModelForgeNetworkStack-{env_name}", env=cdk_env)
 

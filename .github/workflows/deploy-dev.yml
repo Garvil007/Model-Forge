@@ -1,0 +1,28 @@
+name: Deploy to dev
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/deploy.yml
+    # environment: dev resolves MF_AWS_ACCOUNT_ID / MF_SMOKE_TEST_EMAIL /
+    # MF_SMOKE_TEST_PASSWORD from the "dev" GitHub Environment's own secrets, distinct
+    # from "production"'s (see release-prod.yml).
+    environment: dev
+    with:
+      cdk_env: dev
+      run_smoke_test: true
+    secrets: inherit
+    permissions:
+      contents: read
+      id-token: write

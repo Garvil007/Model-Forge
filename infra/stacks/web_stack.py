@@ -37,10 +37,15 @@ class WebStack(Stack):
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
         is_dev = env_name == "dev"
+        account = Stack.of(self).account
 
         self.site_bucket = s3.Bucket(
             self,
             "SiteBucket",
+            # Named deterministically (rather than CDK-generated) so the GitHub Actions
+            # deploy role (see GithubOidcStack) can be scoped to this exact bucket ARN
+            # without waiting for a first deploy to learn the generated name.
+            bucket_name=f"modelforge-web-{env_name}-{account}",
             block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
             encryption=s3.BucketEncryption.S3_MANAGED,
             enforce_ssl=True,

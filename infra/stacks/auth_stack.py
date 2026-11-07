@@ -89,7 +89,11 @@ class AuthStack(Stack):
             "WebClient",
             user_pool_client_name=f"modelforge-web-{env_name}",
             generate_secret=False,
-            auth_flows=cognito.AuthFlow(user_srp=True),
+            # admin_user_password: lets a trusted backend (CI's smoke test, via
+            # AdminInitiateAuth) sign in a test user non-interactively, without
+            # implementing Cognito's SRP handshake in a script. Never exposed to the
+            # browser client, which still only ever uses SRP.
+            auth_flows=cognito.AuthFlow(user_srp=True, admin_user_password=True),
             o_auth=cognito.OAuthSettings(
                 flows=cognito.OAuthFlows(authorization_code_grant=True),
                 scopes=[

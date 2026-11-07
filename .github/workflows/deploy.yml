@@ -1,0 +1,233 @@
+name: Deploy (reusable)
+
+# Called by deploy-dev.yml (push to main) and release-prod.yml (manual approval via the
+# "production" GitHub Environment). Never triggered directly — there is no `on.push`/
+# `on.workflow_dispatch` here on purpose, so this can't accidentally run outside one of
+# those two gated entry points.
+on:
+  workflow_call:
+    inputs:
+      cdk_env:
+        description: CDK context env name ("dev" or "prod"); also the OIDC deploy role suffix.
+        required: true
+        type: string
+      run_smoke_test:
+        description: Run the post-deploy smoke test (dev only — needs the test Cognito user).
+        required: true
+        type: boolean
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "22"
+
+jobs:
+  detect-worker-images:
+    runs-on: ubuntu-latest
+    outputs:
+      images: ${{ steps.changed.outputs.images }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.3.0
+        with:
+          fetch-depth: 0
+      - name: Compute changed worker image dirs
+        id: changed
+        shell: bash
+        run: |
+          set -euo pipefail
+          all_images="cpu-torch cpu-tf cpu-convert cpu-llm gpu-base tensorrt"
+
+          if [ "${{ inputs.cdk_env }}" = "prod" ]; then
+            base=$(git rev-parse -q --verify refs/tags/prod-last-deploy || echo "")
+          else
+            base="${{ github.event.before }}"
+          fi
+
+          if [ -z "$base" ] || ! git cat-file -e "$base" 2>/dev/null; then
+            echo "No usable diff base; building every worker image." >&2
+            changed="$all_images"
+          else
+            diff_files=$(git diff --name-only "$base" "${{ github.sha }}")
+            if echo "$diff_files" | grep -qE '^workers/(core|ops)/|^workers/pyproject\.toml$|^packages/(catalog|db)/'; then
+              echo "Shared worker code changed; building every worker image." >&2
+              changed="$all_images"
+            else
+              changed=""
+              for image in $all_images; do
+                if echo "$diff_files" | grep -q "^workers/images/$image/"; then
+                  changed="$changed $image"
+                fi
+              done
+            fi
+          fi
+
+          json=$(printf '%s\n' $changed | jq -R . | jq -sc '. - [""]')
+          echo "Changed images: $json" >&2
+          echo "images=$json" >> "$GITHUB_OUTPUT"
+
+  build-push-worker-images:
+    needs: detect-worker-images
+    if: needs.detect-worker-images.outputs.images != '[]'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    strategy:
+      matrix:
+        image: ${{ fromJson(needs.detect-worker-images.outputs.images) }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.3.0
+      - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.MF_AWS_ACCOUNT_ID }}:role/modelforge-deploy-${{ inputs.cdk_env }}
+          aws-region: ${{ env.AWS_REGION }}
+      - uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2.0.1
+        id: ecr-login
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.11.1
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.18.0
+        with:
+          context: .
+          file: workers/images/${{ matrix.image }}/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.ecr-login.outputs.registry }}/modelforge-${{ matrix.image }}:${{ github.sha }}
+            ${{ steps.ecr-login.outputs.registry }}/modelforge-${{ matrix.image }}:latest
+          cache-from: type=gha,scope=worker-${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=worker-${{ matrix.image }}
+
+  deploy:
+    needs: [detect-worker-images, build-push-worker-images]
+    if: always() && needs.detect-worker-images.result == 'success' && (needs.build-push-worker-images.result == 'success' || needs.build-push-worker-images.result == 'skipped')
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    outputs:
+      api_url: ${{ steps.outputs.outputs.api_url }}
+      site_bucket: ${{ steps.outputs.outputs.site_bucket }}
+      distribution_id: ${{ steps.outputs.outputs.distribution_id }}
+      user_pool_id: ${{ steps.outputs.outputs.user_pool_id }}
+      user_pool_client_id: ${{ steps.outputs.outputs.user_pool_client_id }}
+      user_pool_region: ${{ steps.outputs.outputs.user_pool_region }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.3.0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: infra/pyproject.toml
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: npm install -g aws-cdk
+      - run: pip install -e "infra[dev]"
+      - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.MF_AWS_ACCOUNT_ID }}:role/modelforge-deploy-${{ inputs.cdk_env }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: cdk deploy --all
+        working-directory: infra
+        run: cdk deploy -c env=${{ inputs.cdk_env }} --all --require-approval never
+      - name: Read stack outputs
+        id: outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          env_name="${{ inputs.cdk_env }}"
+
+          api_out=$(aws cloudformation describe-stacks --stack-name "ModelForgeApiStack-$env_name" --query 'Stacks[0].Outputs' --output json)
+          web_out=$(aws cloudformation describe-stacks --stack-name "ModelForgeWebStack-$env_name" --query 'Stacks[0].Outputs' --output json)
+          auth_out=$(aws cloudformation describe-stacks --stack-name "ModelForgeAuthStack-$env_name" --query 'Stacks[0].Outputs' --output json)
+
+          value() { echo "$1" | jq -r --arg k "$2" '.[] | select(.OutputKey == $k) | .OutputValue'; }
+
+          {
+            echo "api_url=$(value "$api_out" ApiUrl)"
+            echo "site_bucket=$(value "$web_out" SiteBucketName)"
+            echo "distribution_id=$(value "$web_out" DistributionId)"
+            echo "user_pool_id=$(value "$auth_out" UserPoolId)"
+            echo "user_pool_client_id=$(value "$auth_out" UserPoolClientId)"
+            echo "user_pool_region=$(value "$auth_out" UserPoolRegion)"
+          } >> "$GITHUB_OUTPUT"
+
+  frontend:
+    needs: deploy
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.3.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci --prefix apps/web
+      - name: Build SPA
+        # apps/web/.env.production already sets VITE_API_BASE_URL=/api — the frontend
+        # always calls same-origin /api/*, which CloudFront's strip_api_prefix Function
+        # forwards to ApiStack's HTTP API (see web_stack.py). Do NOT override it with
+        # needs.deploy.outputs.api_url here: that would make the built SPA call the raw
+        # Lambda Function URL directly, bypassing CloudFront and breaking CORS/auth.
+        run: npm run build --prefix apps/web
+      - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.MF_AWS_ACCOUNT_ID }}:role/modelforge-deploy-${{ inputs.cdk_env }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Sync built SPA to S3
+        run: >
+          aws s3 sync apps/web/dist "s3://${{ needs.deploy.outputs.site_bucket }}"
+          --delete --cache-control "public,max-age=31536000,immutable" --exclude index.html
+      - name: Upload index.html with no-cache (so a deploy is visible immediately)
+        run: >
+          aws s3 cp apps/web/dist/index.html "s3://${{ needs.deploy.outputs.site_bucket }}/index.html"
+          --cache-control "no-cache"
+      - name: Invalidate CloudFront
+        run: >
+          aws cloudfront create-invalidation
+          --distribution-id "${{ needs.deploy.outputs.distribution_id }}" --paths "/*"
+
+  smoke-test:
+    needs: [deploy, frontend]
+    if: inputs.run_smoke_test
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.3.0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: scripts/ci/requirements.txt
+      - run: pip install -r scripts/ci/requirements.txt
+      - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.MF_AWS_ACCOUNT_ID }}:role/modelforge-deploy-${{ inputs.cdk_env }}
+          aws-region: ${{ env.AWS_REGION }}
+      - run: python scripts/ci/smoke_test.py
+        env:
+          MF_API_URL: ${{ needs.deploy.outputs.api_url }}
+          MF_COGNITO_USER_POOL_ID: ${{ needs.deploy.outputs.user_pool_id }}
+          MF_COGNITO_CLIENT_ID: ${{ needs.deploy.outputs.user_pool_client_id }}
+          MF_COGNITO_REGION: ${{ needs.deploy.outputs.user_pool_region }}
+          MF_SMOKE_TEST_EMAIL: ${{ secrets.MF_SMOKE_TEST_EMAIL }}
+          MF_SMOKE_TEST_PASSWORD: ${{ secrets.MF_SMOKE_TEST_PASSWORD }}
+
+  mark-prod-deployed:
+    needs: [deploy, frontend]
+    if: inputs.cdk_env == 'prod'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.3.0
+      - name: Move the prod-last-deploy tag to this commit
+        run: |
+          git tag -f prod-last-deploy "${{ github.sha }}"
+          git push origin prod-last-deploy --force

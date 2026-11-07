@@ -1,0 +1,30 @@
+name: Release to prod
+
+# Manual only. The approval gate is the "production" GitHub Environment's required
+# reviewers (configure in the repo's Settings -> Environments -> production) — this
+# workflow has no gate of its own beyond that.
+on:
+  workflow_dispatch: {}
+
+concurrency:
+  group: release-prod
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  release:
+    uses: ./.github/workflows/deploy.yml
+    environment: production
+    with:
+      cdk_env: prod
+      # No smoke test in prod: it would sign in with a real customer-facing user pool
+      # and run a billable job on every release. Dev's smoke test on every main-branch
+      # push is the gate that catches job-pipeline regressions before they reach here.
+      run_smoke_test: false
+    secrets: inherit
+    permissions:
+      contents: write # mark-prod-deployed moves the prod-last-deploy tag
+      id-token: write
