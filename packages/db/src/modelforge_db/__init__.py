@@ -15,6 +15,7 @@ from .records import (
     UsageRecord,
     UserRecord,
 )
+from .repositories.billing_events import BillingEventRepository
 from .repositories.datasets import DatasetRepository
 from .repositories.job_events import JobEventRepository
 from .repositories.jobs import JobRepository
@@ -48,4 +49,5 @@ __all__ = [
     "JobEventRepository",
     "UsageRepository",
     "UploadRepository",
+    "BillingEventRepository",
 ]

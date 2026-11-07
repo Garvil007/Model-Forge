@@ -43,3 +43,33 @@
   flex-direction: column;
   gap: var(--space-3);
 }
+
+.tagline {
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+  margin: 0;
+}
+
+.workings {
+  margin-top: var(--space-10);
+}
+
+.workingsTable {
+  width: 100%;
+  border-collapse: collapse;
+  margin: var(--space-6) 0;
+  font-size: var(--font-size-sm);
+}
+
+.workingsTable th,
+.workingsTable td {
+  text-align: left;
+  padding: var(--space-3) var(--space-5);
+  border-bottom: var(--space-0) solid var(--soft);
+}
+
+.workingsNote {
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+  margin: 0;
+}

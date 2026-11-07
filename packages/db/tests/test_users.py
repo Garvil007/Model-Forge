@@ -102,3 +102,38 @@ def test_get_hf_token_returns_none_when_never_set(table: Any) -> None:
     repo.create(user_id, f"{user_id}@example.com")
 
     assert repo.get_by_id(user_id).hf_token_ciphertext is None
+
+
+def test_set_plan_upgrades_and_stores_stripe_customer_id(table: Any) -> None:
+    repo = UserRepository(table)
+    user_id = unique_id()
+    repo.create(user_id, f"{user_id}@example.com", plan="free")
+
+    updated = repo.set_plan(user_id, "pro", stripe_customer_id="cus_test123")
+
+    assert updated.plan == "pro"
+    assert updated.stripe_customer_id == "cus_test123"
+    assert repo.get_by_id(user_id) == updated
+
+
+def test_set_plan_without_customer_id_leaves_it_unchanged(table: Any) -> None:
+    repo = UserRepository(table)
+    user_id = unique_id()
+    repo.create(user_id, f"{user_id}@example.com", plan="free")
+    repo.set_plan(user_id, "pro", stripe_customer_id="cus_test123")
+
+    downgraded = repo.set_plan(user_id, "free")
+
+    assert downgraded.plan == "free"
+    assert downgraded.stripe_customer_id == "cus_test123"
+
+
+def test_set_plan_on_missing_user_raises_not_found(table: Any) -> None:
+    repo = UserRepository(table)
+
+    try:
+        repo.set_plan(unique_id(), "pro")
+    except NotFoundError:
+        pass
+    else:
+        raise AssertionError("expected NotFoundError")

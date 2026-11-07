@@ -93,6 +93,30 @@ class UserRepository:
             return None
         return encryptor.decrypt(record.hf_token_ciphertext)
 
+    def set_plan(
+        self, user_id: str, plan: str, *, stripe_customer_id: str | None = None
+    ) -> UserRecord:
+        """Set the user's plan — the only writer of `plan` is the Stripe webhook handler
+        (`app/routers/billing.py`), never the checkout/portal endpoints themselves, so the
+        UI never shows an upgrade before Stripe actually confirms it."""
+        update_expression = "SET plan = :plan, updatedAt = :updatedAt"
+        values: dict[str, Any] = {":plan": plan, ":updatedAt": now_iso()}
+        if stripe_customer_id is not None:
+            update_expression += ", stripeCustomerId = :stripeCustomerId"
+            values[":stripeCustomerId"] = stripe_customer_id
+        try:
+            response = self._table.update_item(
+                Key={"PK": user_pk(user_id), "SK": profile_sk()},
+                UpdateExpression=update_expression,
+                ConditionExpression="attribute_exists(PK)",
+                ExpressionAttributeValues=values,
+                ReturnValues="ALL_NEW",
+            )
+        except ClientError as error:
+            raise_not_found_on_condition_failure(error, f"user {user_id!r} not found")
+            raise
+        return _to_record(response["Attributes"])
+
 
 def _to_record(item: dict[str, Any]) -> UserRecord:
     return UserRecord(
@@ -103,4 +127,5 @@ def _to_record(item: dict[str, Any]) -> UserRecord:
         created_at=item["createdAt"],
         updated_at=item["updatedAt"],
         hf_token_ciphertext=item.get("hfTokenCiphertext"),
+        stripe_customer_id=item.get("stripeCustomerId"),
     )

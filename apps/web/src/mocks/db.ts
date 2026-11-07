@@ -12,6 +12,13 @@ export const settings: ApiSettings & { hfTokenValue: string | null } = {
   hfTokenValue: null,
 }
 
+/** Mock billing state — `/billing/checkout-session` flips this to `'pro'` immediately
+ * (standing in for Stripe's webhook, which there's no real delivery of in the mock). */
+export const billing: { plan: 'free' | 'pro'; stripeCustomerId: string | null } = {
+  plan: 'free',
+  stripeCustomerId: null,
+}
+
 export interface UploadRecord {
   id: string
   key: string
@@ -58,4 +65,6 @@ export function resetDb(): void {
   settings.notifications = { jobCompleteEmail: true, weeklyDigestEmail: false }
   settings.hasHfToken = false
   settings.hfTokenValue = null
+  billing.plan = 'free'
+  billing.stripeCustomerId = null
 }

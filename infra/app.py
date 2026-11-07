@@ -96,6 +96,7 @@ api_stack = ApiStack(
     cognito_client_id=auth_stack.web_client.user_pool_client_id,
     api_code_path="..",
     gpu_kill_switch=batch_stack.gpu_kill_switch,
+    web_base_url=os.environ.get("MF_WEB_BASE_URL", "http://localhost:5173"),
     env=cdk_env,
 )
 

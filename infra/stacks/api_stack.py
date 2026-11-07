@@ -52,9 +52,25 @@ class ApiStack(Stack):
         cognito_client_id: str,
         api_code_path: str,
         gpu_kill_switch: ssm.IParameter,
+        web_base_url: str,
         **kwargs: Any,
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
+
+        # Day 22: Stripe secret key + webhook signing secret are populated by hand into
+        # SSM (test-mode keys only — see docs/decisions.md), the same way AuthStack's
+        # Google client secret is: `from_secure_string_parameter_attributes` only grants
+        # IAM read access here, it never creates or reads the value at synth time.
+        stripe_secret_key_param = ssm.StringParameter.from_secure_string_parameter_attributes(
+            self,
+            "StripeSecretKeyParam",
+            parameter_name=f"/modelforge/{env_name}/stripe-secret-key",
+        )
+        stripe_webhook_secret_param = ssm.StringParameter.from_secure_string_parameter_attributes(
+            self,
+            "StripeWebhookSecretParam",
+            parameter_name=f"/modelforge/{env_name}/stripe-webhook-secret",
+        )
 
         function = lambda_.DockerImageFunction(
             self,
@@ -99,6 +115,7 @@ class ApiStack(Stack):
                 "MF_GPU_JOBS_QUEUE_URL": gpu_jobs_queue.queue_url,
                 "MF_HF_TOKEN_KMS_KEY_ID": hf_token_key.key_id,
                 "MF_ENV_NAME": env_name,
+                "MF_WEB_BASE_URL": web_base_url,
             },
         )
 
@@ -110,6 +127,8 @@ class ApiStack(Stack):
         gpu_jobs_queue.grant_send_messages(function)
         hf_token_key.grant_encrypt_decrypt(function)
         gpu_kill_switch.grant_read(function)
+        stripe_secret_key_param.grant_read(function)
+        stripe_webhook_secret_param.grant_read(function)
 
         integration = apigwv2_integrations.HttpLambdaIntegration("ApiIntegration", function)
         http_api = apigwv2.HttpApi(

@@ -1,10 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
+import { MemoryRouter } from 'react-router-dom'
 import { JobError } from './JobError'
 
 const meta: Meta<typeof JobError> = {
   title: 'Job/JobError',
   component: JobError,
   args: { onRetry: () => {}, onAdjustSettings: () => {} },
+  decorators: [(Story) => <MemoryRouter><Story /></MemoryRouter>],
 }
 
 export default meta

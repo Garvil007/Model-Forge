@@ -1,6 +1,7 @@
 import { Button } from '../../ui/Button/Button'
 import { Notice } from '../../ui/Notice/Notice'
 import type { JobErrorInfo } from '../../api/types'
+import { UpgradePrompt } from '../dashboard/UpgradePrompt'
 import styles from './JobError.module.css'
 
 export interface JobErrorProps {
@@ -32,6 +33,9 @@ export function JobError({ error, onRetry, onAdjustSettings }: JobErrorProps) {
     <Notice variant="error">
       <strong>{TITLES[error.code]}</strong>
       <p>{error.message}</p>
+      {error.code === 'quota_exceeded' && (
+        <UpgradePrompt message="Upgrade to Pro for more quota and GPU methods." />
+      )}
       <div className={styles.actions}>
         {error.code === 'spot_interrupted' && onRetry && (
           <Button variant="link" onClick={onRetry}>

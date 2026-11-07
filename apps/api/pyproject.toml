@@ -15,6 +15,7 @@ dependencies = [
     "boto3>=1.35",
     "huggingface-hub>=0.25",
     "jsonschema>=4",
+    "stripe>=11,<12",
 ]
 # modelforge-catalog and modelforge-db aren't on PyPI: install them editable alongside
 # this package (see Makefile / CI, which run

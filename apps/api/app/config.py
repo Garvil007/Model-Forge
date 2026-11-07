@@ -35,6 +35,12 @@ class Settings(BaseSettings):
     hf_timeout_seconds: float = 15.0
     hf_token_kms_key_id: str = "alias/modelforge-hf-tokens"
 
+    # Day 22: Stripe Checkout/Portal. The secret key and webhook signing secret are read
+    # from SSM at call time (see stripe_client.py), never from env/.env — only the
+    # non-secret bits (lookup key, redirect base URL) live here.
+    stripe_price_lookup_key_pro: str = "modelforge_pro_monthly"
+    web_base_url: str = "http://localhost:5173"
+
 
 def get_settings() -> Settings:
     return Settings()

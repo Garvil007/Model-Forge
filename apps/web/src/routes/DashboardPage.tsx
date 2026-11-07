@@ -1,13 +1,19 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useDeleteModel, useDownloadModel, useJobsHistory, useModels, useUsage } from '../api/hooks'
-import type { ApiJob, ApiModel, JobHistoryFilters as JobHistoryFiltersValue } from '../api/types'
+import type {
+  ApiJob,
+  ApiModel,
+  ApiUsage,
+  JobHistoryFilters as JobHistoryFiltersValue,
+} from '../api/types'
 import { CompareView } from '../features/dashboard/CompareView'
 import { JobHistoryFilters } from '../features/dashboard/JobHistoryFilters'
 import { JobHistoryTable } from '../features/dashboard/JobHistoryTable'
 import { ModelsTable } from '../features/dashboard/ModelsTable'
 import { buildRerunUrl } from '../features/dashboard/rerunUrl'
 import { StorageUsage } from '../features/dashboard/StorageUsage'
+import { UpgradePrompt } from '../features/dashboard/UpgradePrompt'
 import { Notice } from '../ui/Notice/Notice'
 import { Panel } from '../ui/Panel/Panel'
 import { Tabs } from '../ui/Tabs/Tabs'
@@ -20,6 +26,20 @@ const TABS = [
   { id: 'history', label: 'Job history' },
   { id: 'compare', label: 'Compare' },
 ]
+
+const NEAR_LIMIT_THRESHOLD = 0.8
+
+function isNearLimit(used: number, limit: number): boolean {
+  return limit > 0 && used / limit >= NEAR_LIMIT_THRESHOLD
+}
+
+function isNearAnyLimit(usage: ApiUsage): boolean {
+  return (
+    isNearLimit(usage.cpuSecondsUsed, usage.cpuSecondsLimit) ||
+    isNearLimit(usage.gpuSecondsUsed, usage.gpuSecondsLimit) ||
+    isNearLimit(usage.storageBytesUsed, usage.storageBytesLimit)
+  )
+}
 
 export function DashboardPage() {
   const navigate = useNavigate()
@@ -63,6 +83,10 @@ export function DashboardPage() {
           isError={usageError}
         />
       </Panel>
+
+      {usage && usage.plan === 'free' && isNearAnyLimit(usage) && (
+        <UpgradePrompt message="You're close to a Free plan limit — upgrade for more quota, GPU methods and longer retention." />
+      )}
 
       <Tabs
         tabs={TABS}

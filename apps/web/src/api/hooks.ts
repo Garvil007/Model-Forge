@@ -8,10 +8,12 @@ import {
 import type { Catalog } from '../features/catalog/types'
 import { apiClient } from './client'
 import type {
+  ApiBillingPlan,
   ApiJob,
   ApiModel,
   ApiSettings,
   ApiUsage,
+  BillingRedirect,
   CreateJobRequest,
   ImportHfRequest,
   JobHistoryFilters,
@@ -28,6 +30,30 @@ export const queryKeys = {
   jobsHistory: (filters: JobHistoryFilters) => ['jobs', 'history', filters] as const,
   usage: ['usage'] as const,
   settings: ['settings'] as const,
+  billingPlans: ['billing', 'plans'] as const,
+}
+
+/** Free/Pro display data for `/pricing`. */
+export function useBillingPlans() {
+  return useQuery({
+    queryKey: queryKeys.billingPlans,
+    queryFn: ({ signal }) => apiClient.get<ApiBillingPlan[]>('/billing/plans', { signal }),
+    staleTime: Infinity,
+  })
+}
+
+/** Stripe Checkout for the Pro subscription — caller redirects the browser to `url`. */
+export function useCreateCheckoutSession() {
+  return useMutation({
+    mutationFn: () => apiClient.post<BillingRedirect>('/billing/checkout-session'),
+  })
+}
+
+/** Stripe Customer Portal (manage payment method, cancel) — caller redirects to `url`. */
+export function useCreatePortalSession() {
+  return useMutation({
+    mutationFn: () => apiClient.post<BillingRedirect>('/billing/portal-session'),
+  })
 }
 
 export function useCatalog() {

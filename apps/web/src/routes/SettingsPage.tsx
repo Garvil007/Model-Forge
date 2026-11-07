@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   useClearHfToken,
+  useCreateCheckoutSession,
+  useCreatePortalSession,
   useDeleteAccount,
   useSetHfToken,
   useSettings,
@@ -30,6 +32,8 @@ export function SettingsPage() {
   const setHfToken = useSetHfToken()
   const clearHfToken = useClearHfToken()
   const deleteAccount = useDeleteAccount()
+  const checkout = useCreateCheckoutSession()
+  const portal = useCreatePortalSession()
 
   const [hfTokenInput, setHfTokenInput] = useState('')
   const [deleteConfirmText, setDeleteConfirmText] = useState('')
@@ -45,9 +49,40 @@ export function SettingsPage() {
       </Panel>
 
       <Panel className={settingsStyles.section}>
+        <h2 className={settingsStyles.heading}>Billing</h2>
+        {checkout.isError && (
+          <Notice variant="error">Couldn't start checkout — try again shortly.</Notice>
+        )}
+        {portal.isError && (
+          <Notice variant="error">Couldn't open the billing portal — try again shortly.</Notice>
+        )}
+        {usage?.plan === 'pro' ? (
+          <Button
+            loading={portal.isPending}
+            onClick={() =>
+              portal.mutate(undefined, { onSuccess: ({ url }) => (window.location.href = url) })
+            }
+          >
+            Manage billing
+          </Button>
+        ) : (
+          <Button
+            loading={checkout.isPending}
+            onClick={() =>
+              checkout.mutate(undefined, { onSuccess: ({ url }) => (window.location.href = url) })
+            }
+          >
+            Upgrade to Pro
+          </Button>
+        )}
+      </Panel>
+
+      <Panel className={settingsStyles.section}>
         <h2 className={settingsStyles.heading}>Notifications</h2>
         {settingsLoading && <p>Loading…</p>}
-        {settingsError && <Notice variant="error">Couldn't load your notification settings.</Notice>}
+        {settingsError && (
+          <Notice variant="error">Couldn't load your notification settings.</Notice>
+        )}
         {settings && (
           <div className={settingsStyles.toggles}>
             <Toggle
@@ -77,7 +112,8 @@ export function SettingsPage() {
       <Panel className={settingsStyles.section}>
         <h2 className={settingsStyles.heading}>Hugging Face token</h2>
         <p className={settingsStyles.note}>
-          Used to import gated repositories. {settings?.hasHfToken ? 'A token is on file.' : 'No token on file.'}
+          Used to import gated repositories.{' '}
+          {settings?.hasHfToken ? 'A token is on file.' : 'No token on file.'}
         </p>
         <div className={settingsStyles.hfRow}>
           <TextInput
@@ -120,8 +156,8 @@ export function SettingsPage() {
       <Panel className={settingsStyles.section}>
         <h2 className={settingsStyles.heading}>Delete account</h2>
         <Notice variant="warning">
-          This permanently deletes every model, job and result you own — all S3 objects and
-          DynamoDB items — and cannot be undone.
+          This permanently deletes every model, job and result you own — all S3 objects and DynamoDB
+          items — and cannot be undone.
         </Notice>
         <TextInput
           label={`Type ${DELETE_CONFIRM_WORD} to confirm`}

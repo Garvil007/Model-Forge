@@ -171,6 +171,22 @@ export interface SetHfTokenRequest {
   token: string
 }
 
+/** GET /billing/plans — display data for the `/pricing` page. */
+export interface ApiBillingPlan {
+  id: string
+  name: string
+  monthlyPriceUsdCents: number
+  tagline: string
+  features: string[]
+}
+
+/** POST /billing/checkout-session and /billing/portal-session both just hand back a
+ * Stripe-hosted URL to redirect the browser to — plan changes only ever happen via the
+ * webhook, once Stripe confirms them. */
+export interface BillingRedirect {
+  url: string
+}
+
 export interface DeleteAccountRequest {
   /** The user must type this exact word to enable the request — enforced client-side; the
    * server re-checks it so a forged request can't skip the confirmation either. */

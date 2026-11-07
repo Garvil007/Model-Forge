@@ -1,11 +1,13 @@
 import { delay, http, HttpResponse } from 'msw'
 import catalogJson from '../features/catalog/generated/catalog.json'
 import type {
+  ApiBillingPlan,
   ApiErrorBody,
   ApiJob,
   ApiModel,
   ApiSettings,
   ApiUsage,
+  BillingRedirect,
   CompleteUploadRequest,
   CreateJobRequest,
   CreateUploadRequest,
@@ -20,7 +22,16 @@ import type {
 } from '../api/types'
 import { getOperationById, type ParamValues } from '../features/catalog/types'
 import { HF_REPOS } from './data'
-import { initialStages, jobs, makeId, models, settings, uploads, type JobRecord } from './db'
+import {
+  billing,
+  initialStages,
+  jobs,
+  makeId,
+  models,
+  settings,
+  uploads,
+  type JobRecord,
+} from './db'
 import { stageDurationMs, stagesForOperation, totalDurationMs, type JobStageDef } from './jobStages'
 import { getScenarios, type JobErrorScenario } from './scenarios'
 
@@ -322,7 +333,9 @@ export const handlers = [
     if (!model) {
       return HttpResponse.json(errorBody('model_not_found', 'Unknown model.'), { status: 404 })
     }
-    return HttpResponse.json({ url: `https://example-bucket.local/mock/${model.id}/${model.filename}` })
+    return HttpResponse.json({
+      url: `https://example-bucket.local/mock/${model.id}/${model.filename}`,
+    })
   }),
 
   http.post('/api/jobs', async ({ request }) => {
@@ -427,18 +440,82 @@ export const handlers = [
     if (expired) return expired
     await simulateLatency()
     const storageBytesUsed = [...models.values()].reduce((sum, model) => sum + model.size, 0)
+    const isPro = billing.plan === 'pro'
     return HttpResponse.json({
-      plan: 'free',
+      plan: billing.plan,
       cpuSecondsUsed: 0,
-      cpuSecondsLimit: 120 * 60,
+      cpuSecondsLimit: (isPro ? 1000 : 120) * 60,
       gpuSecondsUsed: 0,
-      gpuSecondsLimit: 15 * 60,
-      maxConcurrentJobs: 2,
+      gpuSecondsLimit: (isPro ? 180 : 15) * 60,
+      maxConcurrentJobs: isPro ? 10 : 2,
       gpuKillSwitchOn: false,
       storageBytesUsed,
       storageBytesLimit: STORAGE_BYTES_LIMIT,
-      retentionDays: RETENTION_DAYS,
+      retentionDays: isPro ? 30 : RETENTION_DAYS,
     } satisfies ApiUsage)
+  }),
+
+  http.get('/api/billing/plans', async () => {
+    await simulateLatency()
+    return HttpResponse.json([
+      {
+        id: 'free',
+        name: 'Free',
+        monthlyPriceUsdCents: 0,
+        tagline: 'Start compressing models at no cost.',
+        features: [
+          'CPU compression and conversion methods',
+          '2 GB max model size',
+          '120 CPU-minutes / month',
+          '7-day result retention',
+          '2 concurrent jobs',
+        ],
+      },
+      {
+        id: 'pro',
+        name: 'Pro',
+        monthlyPriceUsdCents: 2900,
+        tagline: 'GPU methods, more quota, longer retention.',
+        features: [
+          'Everything in Free',
+          'GPU methods (QAT, distillation, TensorRT, ...)',
+          '5 GB max model size',
+          '1000 CPU-minutes + 180 GPU-minutes / month',
+          '30-day result retention',
+          '10 concurrent jobs',
+          'Priority support',
+        ],
+      },
+    ] satisfies ApiBillingPlan[])
+  }),
+
+  http.post('/api/billing/checkout-session', async () => {
+    const expired = sessionExpiredResponse()
+    if (expired) return expired
+    await simulateLatency()
+    // No real Stripe redirect in the mock — stand in for the webhook by upgrading
+    // immediately and sending the browser straight to where a real return would land.
+    billing.plan = 'pro'
+    billing.stripeCustomerId = 'cus_mock_123'
+    return HttpResponse.json({ url: '/settings?upgraded=1' } satisfies BillingRedirect)
+  }),
+
+  http.post('/api/billing/portal-session', async () => {
+    const expired = sessionExpiredResponse()
+    if (expired) return expired
+    await simulateLatency()
+    if (!billing.stripeCustomerId) {
+      return HttpResponse.json(
+        {
+          error: {
+            code: 'no_billing_account',
+            message: 'No billing account yet — upgrade to Pro first.',
+          },
+        } satisfies ApiErrorBody,
+        { status: 400 },
+      )
+    }
+    return HttpResponse.json({ url: '/settings' } satisfies BillingRedirect)
   }),
 
   http.get('/api/settings', async () => {
@@ -499,10 +576,9 @@ export const handlers = [
     const body = (await request.json().catch(() => null)) as DeleteAccountRequest | null
     await simulateLatency()
     if (body?.confirm !== 'DELETE') {
-      return HttpResponse.json(
-        errorBody('confirmation_required', 'Type DELETE to confirm.'),
-        { status: 400 },
-      )
+      return HttpResponse.json(errorBody('confirmation_required', 'Type DELETE to confirm.'), {
+        status: 400,
+      })
     }
     models.clear()
     jobs.clear()

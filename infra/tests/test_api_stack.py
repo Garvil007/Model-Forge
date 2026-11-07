@@ -48,6 +48,7 @@ def _synth_template() -> Template:
             cognito_client_id="fakeclientid",
             api_code_path=".",
             gpu_kill_switch=gpu_kill_switch,
+            web_base_url="http://localhost:5173",
             env=_ENV,
         )
     return Template.from_stack(stack)
