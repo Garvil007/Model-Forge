@@ -4,19 +4,29 @@ import type {
   ApiErrorBody,
   ApiJob,
   ApiModel,
+  ApiSettings,
+  ApiUsage,
   CompleteUploadRequest,
   CreateJobRequest,
   CreateUploadRequest,
   CreateUploadResponse,
+  DeleteAccountRequest,
   ImportHfRequest,
   JobErrorInfo,
   JobStage,
+  PaginatedJobs,
+  SetHfTokenRequest,
+  UpdateNotificationsRequest,
 } from '../api/types'
 import { getOperationById, type ParamValues } from '../features/catalog/types'
 import { HF_REPOS } from './data'
-import { initialStages, jobs, makeId, models, uploads, type JobRecord } from './db'
+import { initialStages, jobs, makeId, models, settings, uploads, type JobRecord } from './db'
 import { stageDurationMs, stagesForOperation, totalDurationMs, type JobStageDef } from './jobStages'
 import { getScenarios, type JobErrorScenario } from './scenarios'
+
+const STORAGE_BYTES_LIMIT = 5 * 1024 * 1024 * 1024
+const RETENTION_DAYS = 30
+const JOBS_PAGE_SIZE = 10
 
 const UPLOAD_PART_SIZE = 8 * 1024 * 1024
 const BASE_DELAY_MS = 150
@@ -292,6 +302,29 @@ export const handlers = [
     return HttpResponse.json(model)
   }),
 
+  http.delete('/api/models/:id', async ({ params }) => {
+    const expired = sessionExpiredResponse()
+    if (expired) return expired
+    await simulateLatency()
+    const id = String(params.id)
+    if (!models.has(id)) {
+      return HttpResponse.json(errorBody('model_not_found', 'Unknown model.'), { status: 404 })
+    }
+    models.delete(id)
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  http.get('/api/models/:id/download', async ({ params }) => {
+    const expired = sessionExpiredResponse()
+    if (expired) return expired
+    await simulateLatency()
+    const model = models.get(String(params.id))
+    if (!model) {
+      return HttpResponse.json(errorBody('model_not_found', 'Unknown model.'), { status: 404 })
+    }
+    return HttpResponse.json({ url: `https://example-bucket.local/mock/${model.id}/${model.filename}` })
+  }),
+
   http.post('/api/jobs', async ({ request }) => {
     const expired = sessionExpiredResponse()
     if (expired) return expired
@@ -329,6 +362,7 @@ export const handlers = [
       createdAt: new Date().toISOString(),
       result: null,
       error: null,
+      cost: Number((operation.queue === 'gpu' ? 0.08 : 0.01).toFixed(2)),
       startedAt: Date.now(),
       canceled: false,
       stageDefs,
@@ -363,13 +397,115 @@ export const handlers = [
     return HttpResponse.json(job as ApiJob)
   }),
 
-  http.get('/api/jobs', async () => {
+  http.get('/api/jobs', async ({ request }) => {
     const expired = sessionExpiredResponse()
     if (expired) return expired
     await simulateLatency()
-    const list = [...jobs.values()]
+    const url = new URL(request.url)
+    const status = url.searchParams.get('status')
+    const operationId = url.searchParams.get('operationId')
+    const dateFrom = url.searchParams.get('dateFrom')
+    const dateTo = url.searchParams.get('dateTo')
+    const cursor = url.searchParams.get('cursor')
+
+    let list = [...jobs.values()]
       .map((job) => advanceJob(job))
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    return HttpResponse.json(list as ApiJob[])
+    if (status) list = list.filter((job) => job.status === status)
+    if (operationId) list = list.filter((job) => job.operationId === operationId)
+    if (dateFrom) list = list.filter((job) => job.createdAt >= dateFrom)
+    if (dateTo) list = list.filter((job) => job.createdAt <= dateTo)
+
+    const start = cursor ? Number(cursor) : 0
+    const page = list.slice(start, start + JOBS_PAGE_SIZE)
+    const nextCursor = start + JOBS_PAGE_SIZE < list.length ? String(start + JOBS_PAGE_SIZE) : null
+    return HttpResponse.json({ items: page as ApiJob[], nextCursor } satisfies PaginatedJobs)
+  }),
+
+  http.get('/api/usage', async () => {
+    const expired = sessionExpiredResponse()
+    if (expired) return expired
+    await simulateLatency()
+    const storageBytesUsed = [...models.values()].reduce((sum, model) => sum + model.size, 0)
+    return HttpResponse.json({
+      plan: 'free',
+      cpuSecondsUsed: 0,
+      cpuSecondsLimit: 120 * 60,
+      gpuSecondsUsed: 0,
+      gpuSecondsLimit: 15 * 60,
+      maxConcurrentJobs: 2,
+      gpuKillSwitchOn: false,
+      storageBytesUsed,
+      storageBytesLimit: STORAGE_BYTES_LIMIT,
+      retentionDays: RETENTION_DAYS,
+    } satisfies ApiUsage)
+  }),
+
+  http.get('/api/settings', async () => {
+    const expired = sessionExpiredResponse()
+    if (expired) return expired
+    await simulateLatency()
+    return HttpResponse.json({
+      notifications: settings.notifications,
+      hasHfToken: settings.hasHfToken,
+    } satisfies ApiSettings)
+  }),
+
+  http.put('/api/settings/notifications', async ({ request }) => {
+    const expired = sessionExpiredResponse()
+    if (expired) return expired
+    const body = (await request.json()) as UpdateNotificationsRequest
+    await simulateLatency()
+    settings.notifications = body.notifications
+    return HttpResponse.json({
+      notifications: settings.notifications,
+      hasHfToken: settings.hasHfToken,
+    } satisfies ApiSettings)
+  }),
+
+  http.put('/api/settings/hf-token', async ({ request }) => {
+    const expired = sessionExpiredResponse()
+    if (expired) return expired
+    const body = (await request.json()) as SetHfTokenRequest
+    await simulateLatency()
+    if (!body.token) {
+      return HttpResponse.json(errorBody('invalid_request', 'A token is required.'), {
+        status: 400,
+      })
+    }
+    settings.hfTokenValue = body.token
+    settings.hasHfToken = true
+    return HttpResponse.json({
+      notifications: settings.notifications,
+      hasHfToken: settings.hasHfToken,
+    } satisfies ApiSettings)
+  }),
+
+  http.delete('/api/settings/hf-token', async () => {
+    const expired = sessionExpiredResponse()
+    if (expired) return expired
+    await simulateLatency()
+    settings.hfTokenValue = null
+    settings.hasHfToken = false
+    return HttpResponse.json({
+      notifications: settings.notifications,
+      hasHfToken: settings.hasHfToken,
+    } satisfies ApiSettings)
+  }),
+
+  http.delete('/api/account', async ({ request }) => {
+    const expired = sessionExpiredResponse()
+    if (expired) return expired
+    const body = (await request.json().catch(() => null)) as DeleteAccountRequest | null
+    await simulateLatency()
+    if (body?.confirm !== 'DELETE') {
+      return HttpResponse.json(
+        errorBody('confirmation_required', 'Type DELETE to confirm.'),
+        { status: 400 },
+      )
+    }
+    models.clear()
+    jobs.clear()
+    return new HttpResponse(null, { status: 204 })
   }),
 ]

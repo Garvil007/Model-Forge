@@ -117,12 +117,16 @@ class ModelRepository:
             response = self._table.update_item(
                 Key={"PK": user_pk(user_id), "SK": model_sk(model_id)},
                 UpdateExpression=(
-                    "SET #status = :ready, #format = :format, family = :family, "
+                    "SET #status = :ready, #format = :format, #family = :family, "
                     "bits = :bits, paramCount = :paramCount, details = :details, "
                     "updatedAt = :updatedAt"
                 ),
                 ConditionExpression="attribute_exists(PK) AND #status = :expected",
-                ExpressionAttributeNames={"#status": "status", "#format": "format"},
+                ExpressionAttributeNames={
+                    "#status": "status",
+                    "#format": "format",
+                    "#family": "family",
+                },
                 ExpressionAttributeValues={
                     ":ready": "ready",
                     ":expected": expected_status,

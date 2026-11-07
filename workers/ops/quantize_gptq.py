@@ -30,10 +30,26 @@ def _quantize(
     group_size = int(params.get("group", "128"))
     act_order = bool(params.get("act_order", True))
 
+    # `scheme` (a bare string or dict-of-preset-names) has no way to carry a custom
+    # group size — confirmed live that the installed llmcompressor (0.15.0) rejects
+    # any inline scheme dict with a pydantic ValueError ("must either be a preset
+    # scheme name or a dictionary of preset scheme names"). A custom group size has
+    # to go through `config_groups` instead (also confirmed live: `GPTQModifier.group`
+    # is an unrelated internal scheduling field, not quantization group size at all).
     recipe = GPTQModifier(
         targets="Linear",
-        scheme=f"W{bits}A16",
-        group_size=group_size,
+        config_groups={
+            "group_0": {
+                "targets": ["Linear"],
+                "weights": {
+                    "num_bits": bits,
+                    "type": "int",
+                    "symmetric": True,
+                    "strategy": "group",
+                    "group_size": group_size,
+                },
+            }
+        },
         actorder="weight" if act_order else None,
         ignore=["lm_head"],
     )

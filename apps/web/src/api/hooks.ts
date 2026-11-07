@@ -1,7 +1,23 @@
-import { useMutation, useQuery, useQueryClient, type UseQueryOptions } from '@tanstack/react-query'
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type UseQueryOptions,
+} from '@tanstack/react-query'
 import type { Catalog } from '../features/catalog/types'
 import { apiClient } from './client'
-import type { ApiJob, ApiModel, CreateJobRequest, ImportHfRequest } from './types'
+import type {
+  ApiJob,
+  ApiModel,
+  ApiSettings,
+  ApiUsage,
+  CreateJobRequest,
+  ImportHfRequest,
+  JobHistoryFilters,
+  NotificationSettings,
+  PaginatedJobs,
+} from './types'
 
 export const queryKeys = {
   catalog: ['catalog'] as const,
@@ -9,6 +25,9 @@ export const queryKeys = {
   model: (id: string) => ['models', id] as const,
   jobs: ['jobs'] as const,
   job: (id: string) => ['jobs', id] as const,
+  jobsHistory: (filters: JobHistoryFilters) => ['jobs', 'history', filters] as const,
+  usage: ['usage'] as const,
+  settings: ['settings'] as const,
 }
 
 export function useCatalog() {
@@ -16,6 +35,14 @@ export function useCatalog() {
     queryKey: queryKeys.catalog,
     queryFn: ({ signal }) => apiClient.get<Catalog>('/catalog', { signal }),
     staleTime: Infinity,
+  })
+}
+
+/** Remaining monthly CPU/GPU quota, for the dashboard's quota display. */
+export function useUsage() {
+  return useQuery({
+    queryKey: queryKeys.usage,
+    queryFn: ({ signal }) => apiClient.get<ApiUsage>('/usage', { signal }),
   })
 }
 
@@ -98,5 +125,88 @@ export function useCancelJob() {
   return useMutation({
     mutationFn: (id: string) => apiClient.post<ApiJob>(`/jobs/${id}/cancel`),
     onSuccess: (job) => queryClient.setQueryData(queryKeys.job(job.id), job),
+  })
+}
+
+export function useDeleteModel() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => apiClient.delete<void>(`/models/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.models }),
+  })
+}
+
+export function useDownloadModel() {
+  return useMutation({
+    mutationFn: (id: string) => apiClient.get<{ url: string }>(`/models/${id}/download`),
+  })
+}
+
+export function useDownloadJobResult() {
+  return useMutation({
+    mutationFn: (id: string) => apiClient.get<{ url: string }>(`/jobs/${id}/download`),
+  })
+}
+
+function jobsHistoryQueryString(filters: JobHistoryFilters, cursor: string | undefined): string {
+  const params = new URLSearchParams()
+  if (filters.status) params.set('status', filters.status)
+  if (filters.operationId) params.set('operationId', filters.operationId)
+  if (filters.dateFrom) params.set('dateFrom', filters.dateFrom)
+  if (filters.dateTo) params.set('dateTo', filters.dateTo)
+  if (cursor) params.set('cursor', cursor)
+  const query = params.toString()
+  return query ? `?${query}` : ''
+}
+
+/** Job history, newest first, paged via the DynamoDB cursor the API hands back as
+ * `nextCursor` — `fetchNextPage` asks for the next page with that cursor attached. */
+export function useJobsHistory(filters: JobHistoryFilters) {
+  return useInfiniteQuery({
+    queryKey: queryKeys.jobsHistory(filters),
+    queryFn: ({ pageParam, signal }) =>
+      apiClient.get<PaginatedJobs>(`/jobs${jobsHistoryQueryString(filters, pageParam)}`, {
+        signal,
+      }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+  })
+}
+
+export function useSettings() {
+  return useQuery({
+    queryKey: queryKeys.settings,
+    queryFn: ({ signal }) => apiClient.get<ApiSettings>('/settings', { signal }),
+  })
+}
+
+export function useUpdateNotifications() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (notifications: NotificationSettings) =>
+      apiClient.put<ApiSettings>('/settings/notifications', { notifications }),
+    onSuccess: (settings) => queryClient.setQueryData(queryKeys.settings, settings),
+  })
+}
+
+export function useSetHfToken() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (token: string) => apiClient.put<ApiSettings>('/settings/hf-token', { token }),
+    onSuccess: (settings) => queryClient.setQueryData(queryKeys.settings, settings),
+  })
+}
+
+export function useClearHfToken() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => apiClient.delete<ApiSettings>('/settings/hf-token'),
+    onSuccess: (settings) => queryClient.setQueryData(queryKeys.settings, settings),
+  })
+}
+
+export function useDeleteAccount() {
+  return useMutation({
+    mutationFn: () => apiClient.delete<void>('/account', { confirm: 'DELETE' }),
   })
 }

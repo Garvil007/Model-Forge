@@ -18,7 +18,13 @@ from typing import Any, Protocol
 
 class BatchJobClient(Protocol):
     def submit_job(
-        self, job_id: str, job_definition: str, queue: str, *, message_body: str | None = None
+        self,
+        job_id: str,
+        job_definition: str,
+        queue: str,
+        *,
+        message_body: str | None = None,
+        timeout_seconds: int | None = None,
     ) -> str:
         """Submit a Batch job for `job_id`, returning the Batch job id.
 
@@ -26,6 +32,10 @@ class BatchJobClient(Protocol):
         implementation so the handler's call site is uniform, but only
         `LocalBatchJobClient` actually uses it — `RealBatchJobClient` ignores it, since a
         real Batch job reads the job id from its own container parameters, not from SQS.
+
+        `timeout_seconds`, when set, becomes the job's `attemptDurationSeconds` — the
+        plan's `max_job_minutes_cpu`/`max_job_minutes_gpu` (see
+        `modelforge_catalog.plans`), so a stuck job can't run (and bill) forever.
         """
         ...
 
@@ -51,17 +61,26 @@ class RealBatchJobClient:
         self._client = client if client is not None else _boto3_batch_client()
 
     def submit_job(
-        self, job_id: str, job_definition: str, queue: str, *, message_body: str | None = None
+        self,
+        job_id: str,
+        job_definition: str,
+        queue: str,
+        *,
+        message_body: str | None = None,
+        timeout_seconds: int | None = None,
     ) -> str:
         parameters = {"jobId": job_id}
         if message_body is not None:
             parameters["message"] = message_body
-        response = self._client.submit_job(
-            jobName=f"job-{job_id}",
-            jobQueue=queue,
-            jobDefinition=job_definition,
-            parameters=parameters,
-        )
+        kwargs: dict[str, Any] = {
+            "jobName": f"job-{job_id}",
+            "jobQueue": queue,
+            "jobDefinition": job_definition,
+            "parameters": parameters,
+        }
+        if timeout_seconds is not None:
+            kwargs["timeout"] = {"attemptDurationSeconds": timeout_seconds}
+        response = self._client.submit_job(**kwargs)
         return response["jobId"]
 
     def terminate_job(self, batch_job_id: str) -> None:
@@ -84,7 +103,13 @@ class LocalBatchJobClient:
     """
 
     def submit_job(
-        self, job_id: str, job_definition: str, queue: str, *, message_body: str | None = None
+        self,
+        job_id: str,
+        job_definition: str,
+        queue: str,
+        *,
+        message_body: str | None = None,
+        timeout_seconds: int | None = None,
     ) -> str:
         from core import consumer
 

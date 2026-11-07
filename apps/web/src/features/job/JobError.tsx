@@ -17,6 +17,7 @@ const TITLES: Record<JobErrorInfo['code'], string> = {
   bad_calibration_data: 'Calibration data problem',
   gated_model: 'Model access required',
   quota_exceeded: "You've used your quota",
+  gpu_kill_switch: 'GPU jobs paused',
   spot_interrupted: 'Instance interrupted',
   timeout: 'Job timed out',
   unknown: 'Something went wrong',
@@ -39,6 +40,7 @@ export function JobError({ error, onRetry, onAdjustSettings }: JobErrorProps) {
         )}
         {error.code !== 'spot_interrupted' &&
           error.code !== 'quota_exceeded' &&
+          error.code !== 'gpu_kill_switch' &&
           onAdjustSettings && (
             <Button variant="link" onClick={onAdjustSettings}>
               Retry with adjusted settings

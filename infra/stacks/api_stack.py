@@ -29,6 +29,7 @@ from aws_cdk import aws_lambda as lambda_
 from aws_cdk import aws_logs as logs
 from aws_cdk import aws_s3 as s3
 from aws_cdk import aws_sqs as sqs
+from aws_cdk import aws_ssm as ssm
 from constructs import Construct
 
 
@@ -50,6 +51,7 @@ class ApiStack(Stack):
         cognito_region: str,
         cognito_client_id: str,
         api_code_path: str,
+        gpu_kill_switch: ssm.IParameter,
         **kwargs: Any,
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
@@ -96,6 +98,7 @@ class ApiStack(Stack):
                 "MF_CPU_JOBS_QUEUE_URL": cpu_jobs_queue.queue_url,
                 "MF_GPU_JOBS_QUEUE_URL": gpu_jobs_queue.queue_url,
                 "MF_HF_TOKEN_KMS_KEY_ID": hf_token_key.key_id,
+                "MF_ENV_NAME": env_name,
             },
         )
 
@@ -106,6 +109,7 @@ class ApiStack(Stack):
         cpu_jobs_queue.grant_send_messages(function)
         gpu_jobs_queue.grant_send_messages(function)
         hf_token_key.grant_encrypt_decrypt(function)
+        gpu_kill_switch.grant_read(function)
 
         integration = apigwv2_integrations.HttpLambdaIntegration("ApiIntegration", function)
         http_api = apigwv2.HttpApi(

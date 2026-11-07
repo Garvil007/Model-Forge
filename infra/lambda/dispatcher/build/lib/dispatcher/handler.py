@@ -17,7 +17,10 @@ from __future__ import annotations
 from typing import Any
 
 from modelforge_catalog import OPERATIONS, job_messages
+from modelforge_catalog.plans import limits_for
+from modelforge_db.kill_switch import gpu_kill_switch_enabled
 from modelforge_db.repositories.jobs import JobRepository
+from modelforge_db.repositories.users import UserRepository
 
 from .batch_client import get_batch_client
 
@@ -32,7 +35,9 @@ def _batch_queue_for(queue: str) -> str:
     return f"{queue}-queue"
 
 
-def _process_record(body: str, *, jobs: JobRepository, batch_client: Any) -> None:
+def _process_record(
+    body: str, *, jobs: JobRepository, users: UserRepository, batch_client: Any
+) -> None:
     message = job_messages.parse_message(body)
     try:
         job = jobs.get(message.user_id, message.job_id)
@@ -55,12 +60,34 @@ def _process_record(body: str, *, jobs: JobRepository, batch_client: Any) -> Non
         )
         return
 
+    # Re-checked here (not just at POST /jobs) so a job queued just before the switch
+    # flipped on still doesn't reach Batch.
+    if operation.queue == "gpu" and gpu_kill_switch_enabled():
+        jobs.update_progress(
+            message.user_id,
+            message.job_id,
+            status="failed",
+            progress_percent=0,
+            error={"code": "gpu_kill_switch", "message": "GPU jobs are temporarily paused."},
+        )
+        return
+
+    try:
+        user = users.get_by_id(message.user_id)
+        limits = limits_for(user.plan)
+    except Exception:  # noqa: BLE001 — NotFoundError or similar: fall back to Free's caps
+        limits = limits_for("free")
+    timeout_minutes = (
+        limits.max_job_minutes_gpu if operation.queue == "gpu" else limits.max_job_minutes_cpu
+    )
+
     try:
         batch_job_id = batch_client.submit_job(
             message.job_id,
             _job_definition_for(operation.worker_image),
             _batch_queue_for(operation.queue),
             message_body=body,
+            timeout_seconds=timeout_minutes * 60,
         )
     except Exception as error:  # noqa: BLE001 — a submit failure must not leave the job
         # permanently "queued": that silently locks the user's concurrent-job quota with
@@ -79,12 +106,13 @@ def _process_record(body: str, *, jobs: JobRepository, batch_client: Any) -> Non
 
 def handler(event: dict[str, Any], context: Any = None) -> dict[str, Any]:
     jobs = JobRepository()
+    users = UserRepository()
     batch_client = get_batch_client()
 
     processed = 0
     for record in event.get("Records", []):
         try:
-            _process_record(record["body"], jobs=jobs, batch_client=batch_client)
+            _process_record(record["body"], jobs=jobs, users=users, batch_client=batch_client)
             processed += 1
         except Exception as error:  # noqa: BLE001 — log and move on, see module docstring
             print(f"modelforge-dispatcher: error processing record: {error}")

@@ -23,10 +23,9 @@ export interface JobRunnerProps {
 }
 
 function errorFromApiError(error: ApiError): JobErrorInfo {
-  return {
-    code: error.code === 'quota_exceeded' ? 'quota_exceeded' : 'unknown',
-    message: error.message,
-  }
+  const code =
+    error.code === 'quota_exceeded' || error.code === 'gpu_kill_switch' ? error.code : 'unknown'
+  return { code, message: error.message }
 }
 
 /** Composes the whole job lifecycle — run button, expensive-job confirmation, staged progress,

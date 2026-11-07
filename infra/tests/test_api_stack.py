@@ -12,6 +12,7 @@ from unittest.mock import patch
 from aws_cdk import App, Environment
 from aws_cdk import aws_ecr as ecr
 from aws_cdk import aws_lambda as lambda_
+from aws_cdk import aws_ssm as ssm
 from aws_cdk.assertions import Match, Template
 
 from stacks.api_stack import ApiStack
@@ -25,6 +26,10 @@ def _synth_template() -> Template:
     data = DataStack(app, "TestDataStackForApi", env_name="dev", env=_ENV)
     fake_repo = ecr.Repository.from_repository_name(data, "FakeRepo", "fake-repo")
     fake_code = lambda_.DockerImageCode.from_ecr(fake_repo, tag_or_digest="latest")
+    gpu_kill_switch = ssm.StringParameter(
+        data, "FakeGpuKillSwitch", parameter_name="/modelforge/dev/gpu-kill-switch",
+        string_value="off",
+    )
 
     with patch.object(lambda_.DockerImageCode, "from_image_asset", return_value=fake_code):
         stack = ApiStack(
@@ -42,6 +47,7 @@ def _synth_template() -> Template:
             cognito_region="us-east-1",
             cognito_client_id="fakeclientid",
             api_code_path=".",
+            gpu_kill_switch=gpu_kill_switch,
             env=_ENV,
         )
     return Template.from_stack(stack)

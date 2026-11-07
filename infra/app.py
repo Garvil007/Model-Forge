@@ -95,6 +95,7 @@ api_stack = ApiStack(
     cognito_region=region,
     cognito_client_id=auth_stack.web_client.user_pool_client_id,
     api_code_path="..",
+    gpu_kill_switch=batch_stack.gpu_kill_switch,
     env=cdk_env,
 )
 
@@ -116,6 +117,7 @@ alarms_stack = AlarmsStack(
     dispatcher_function=batch_stack.dispatcher,
     api_function=api_stack.function,
     budget_notification_email=budget_email,
+    cost_report_code_path="..",
     env=cdk_env,
 )
 

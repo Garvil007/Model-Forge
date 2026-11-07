@@ -1,0 +1,10 @@
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+  margin-bottom: var(--space-7);
+}
+
+.filters > * {
+  min-width: 160px;
+}

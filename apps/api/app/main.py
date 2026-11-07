@@ -10,7 +10,7 @@ from modelforge_db.records import UserRecord
 from .auth import assert_local_auth_allowed, current_user
 from .config import get_settings
 from .errors import register_error_handlers
-from .routers import catalog, datasets, jobs, models, uploads
+from .routers import catalog, datasets, jobs, models, uploads, usage
 
 
 def create_app() -> FastAPI:
@@ -40,6 +40,7 @@ def create_app() -> FastAPI:
     app.include_router(datasets.router)
     app.include_router(catalog.router)
     app.include_router(jobs.router)
+    app.include_router(usage.router)
 
     return app
 

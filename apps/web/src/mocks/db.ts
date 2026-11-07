@@ -1,10 +1,16 @@
-import type { ApiJob, ApiModel, JobStage } from '../api/types'
+import type { ApiJob, ApiModel, ApiSettings, JobStage } from '../api/types'
 import type { JobStageDef } from './jobStages'
 
 /** In-memory state for the mock backend — reset on every page load / test file, which is fine
  * since nothing here needs to survive a reload. */
 
 export const models = new Map<string, ApiModel>()
+
+export const settings: ApiSettings & { hfTokenValue: string | null } = {
+  notifications: { jobCompleteEmail: true, weeklyDigestEmail: false },
+  hasHfToken: false,
+  hfTokenValue: null,
+}
 
 export interface UploadRecord {
   id: string
@@ -49,4 +55,7 @@ export function resetDb(): void {
   uploads.clear()
   jobs.clear()
   nextId = 1
+  settings.notifications = { jobCompleteEmail: true, weeklyDigestEmail: false }
+  settings.hasHfToken = false
+  settings.hfTokenValue = null
 }

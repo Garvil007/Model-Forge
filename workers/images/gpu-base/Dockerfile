@@ -16,7 +16,16 @@
 
 FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04 AS builder
 
+# Ubuntu 22.04's own repos only carry Python 3.10 — 3.12 needs the deadsnakes PPA
+# (confirmed live: `apt-get install python3.12` fails with "Unable to locate package"
+# straight off this base image). DEBIAN_FRONTEND=noninteractive is required: pulling in
+# python3.12's `tzdata` dependency otherwise drops into an interactive "Geographic area"
+# debconf prompt that hangs the build indefinitely (confirmed live).
+ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
+ && apt-get install -y --no-install-recommends software-properties-common \
+ && add-apt-repository -y ppa:deadsnakes/ppa \
+ && apt-get update \
  && apt-get install -y --no-install-recommends python3.12 python3.12-venv python3-pip \
  && rm -rf /var/lib/apt/lists/*
 
@@ -41,8 +50,17 @@ RUN pip install --no-cache-dir --no-deps \
 
 FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04 AS final
 
+ENV DEBIAN_FRONTEND=noninteractive
+# build-essential (gcc) is required at runtime, not just build time: torch's Triton
+# backend JIT-compiles CUDA kernels on first use and shells out to a real C compiler to
+# do it — confirmed live via a real GPU job failing with "Failed to find C compiler"
+# the first time a GPTQ/AWQ/NF4 op actually ran torch ops against the GPU (the CPU test
+# path never hits this, since MF_LLM_DEVICE=cpu never reaches Triton).
 RUN apt-get update \
- && apt-get install -y --no-install-recommends python3.12 \
+ && apt-get install -y --no-install-recommends software-properties-common build-essential \
+ && add-apt-repository -y ppa:deadsnakes/ppa \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends python3.12 python3.12-dev \
  && rm -rf /var/lib/apt/lists/* \
  && groupadd --system modelforge && useradd --system --gid modelforge --create-home modelforge
 

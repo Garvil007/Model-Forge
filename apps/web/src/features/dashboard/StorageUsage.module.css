@@ -1,0 +1,31 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.headline {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.track {
+  height: var(--space-5);
+  border-radius: var(--radius-pill);
+  background: var(--soft);
+  overflow: hidden;
+}
+
+.fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: var(--radius-pill);
+}
+
+.note {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--font-size-xs);
+}

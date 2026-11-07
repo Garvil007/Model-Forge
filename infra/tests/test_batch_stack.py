@@ -52,6 +52,66 @@ def test_fargate_spot_compute_environment_exists():
     )
 
 
+def test_gpu_spot_compute_environment_capped_at_quota():
+    template = _synth_template()
+    template.has_resource_properties(
+        "AWS::Batch::ComputeEnvironment",
+        Match.object_like(
+            {
+                "ComputeResources": Match.object_like(
+                    {
+                        "Type": "SPOT",
+                        "MaxvCpus": 4,
+                        "MinvCpus": 0,
+                        "InstanceTypes": Match.array_with(["g6.xlarge", "g5.xlarge"]),
+                    }
+                )
+            }
+        ),
+    )
+
+
+def test_gpu_on_demand_fallback_not_created_by_default():
+    # AWS Batch requires a compute environment to be created ENABLED (confirmed live),
+    # so "disabled by default" means the on-demand fallback CE doesn't exist at all
+    # until `gpu_on_demand_fallback_enabled=True` is passed — not that it exists sitting
+    # disabled. Only the GPU Spot compute environment should exist by default.
+    template = _synth_template()
+    gpu_ec2_compute_environments = template.find_resources(
+        "AWS::Batch::ComputeEnvironment",
+        {"Properties": {"ComputeResources": Match.object_like({"Type": "SPOT"})}},
+    )
+    assert len(gpu_ec2_compute_environments) == 1
+
+
+def test_gpu_job_definitions_reserve_a_gpu():
+    template = _synth_template()
+    for image in ("gpu-base", "tensorrt"):
+        template.has_resource_properties(
+            "AWS::Batch::JobDefinition",
+            Match.object_like(
+                {
+                    "JobDefinitionName": f"{image}-job-def",
+                    "ContainerProperties": Match.object_like(
+                        {
+                            "ResourceRequirements": Match.array_with(
+                                [{"Type": "GPU", "Value": "1"}]
+                            )
+                        }
+                    ),
+                }
+            ),
+        )
+
+
+def test_gpu_kill_switch_parameter_exists():
+    template = _synth_template()
+    template.has_resource_properties(
+        "AWS::SSM::Parameter",
+        {"Name": "/modelforge/dev/gpu-kill-switch", "Value": "off"},
+    )
+
+
 def test_job_queues_named_for_dispatcher():
     template = _synth_template()
     template.has_resource_properties("AWS::Batch::JobQueue", {"JobQueueName": "cpu-queue"})

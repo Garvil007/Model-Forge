@@ -10,6 +10,7 @@ export type ParamsAction =
   | { type: 'ensure-defaults'; operationId: string; params: Param[] | undefined }
   | { type: 'set-value'; operationId: string; name: string; value: ParamValue }
   | { type: 'reset'; operationId: string }
+  | { type: 'seed'; operationId: string; values: ParamValues }
 
 export function paramsReducer(state: ParamsState, action: ParamsAction): ParamsState {
   switch (action.type) {
@@ -28,6 +29,9 @@ export function paramsReducer(state: ParamsState, action: ParamsAction): ParamsS
       const rest = { ...state }
       delete rest[action.operationId]
       return rest
+    }
+    case 'seed': {
+      return { ...state, [action.operationId]: { ...action.values } }
     }
     default:
       return state
@@ -49,5 +53,9 @@ export function useParamsState() {
     dispatch({ type: 'set-value', operationId, name, value })
   }
 
-  return { state, valuesFor, ensureDefaults, setValue, dispatch }
+  function seed(operationId: string, values: ParamValues) {
+    dispatch({ type: 'seed', operationId, values })
+  }
+
+  return { state, valuesFor, ensureDefaults, setValue, seed, dispatch }
 }

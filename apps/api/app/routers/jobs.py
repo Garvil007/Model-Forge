@@ -17,6 +17,7 @@ from modelforge_catalog.job_messages import build_message as build_job_message
 from modelforge_catalog.models import ModelInfo, OperationSpec
 from modelforge_catalog.plans import limits_for
 from modelforge_db.exceptions import NotFoundError
+from modelforge_db.kill_switch import gpu_kill_switch_enabled
 from modelforge_db.records import UserRecord
 from modelforge_db.repositories.job_events import JobEventRepository
 from modelforge_db.repositories.jobs import JobRepository
@@ -62,6 +63,10 @@ def get_usage_repository() -> UsageRepository:
     return UsageRepository()
 
 
+def get_gpu_kill_switch() -> bool:
+    return gpu_kill_switch_enabled()
+
+
 def get_job_queue(settings: Settings = Depends(get_settings)) -> JobQueueService:  # noqa: B008
     return JobQueueService(settings)
 
@@ -94,6 +99,7 @@ def create_job(
     models: Annotated[ModelRepository, Depends(get_model_repository)],
     usage: Annotated[UsageRepository, Depends(get_usage_repository)],
     job_queue: Annotated[JobQueueService, Depends(get_job_queue)],
+    gpu_kill_switch_on: Annotated[bool, Depends(get_gpu_kill_switch)],
 ) -> dict[str, Any]:
     operation = _OPERATIONS_BY_ID.get(body.operation_id)
     if operation is None:
@@ -115,14 +121,36 @@ def create_job(
             400, "operation_unavailable", availability.why or "This operation isn't available."
         )
 
-    max_concurrent = limits_for(user.plan).max_concurrent_jobs
+    if operation.queue == "gpu" and gpu_kill_switch_on:
+        raise ApiError(
+            503,
+            "gpu_kill_switch",
+            "GPU jobs are temporarily paused. Please try again later.",
+        )
+
+    limits = limits_for(user.plan)
     active_jobs = [j for j in jobs.list_for_user(user.user_id) if j.status in _ACTIVE_STATUSES]
-    if len(active_jobs) >= max_concurrent:
+    if len(active_jobs) >= limits.max_concurrent_jobs:
         raise ApiError(
             429,
             "quota_exceeded",
             f"You already have {len(active_jobs)} jobs running or queued "
-            f"(limit for your plan is {max_concurrent}).",
+            f"(limit for your plan is {limits.max_concurrent_jobs}).",
+        )
+
+    monthly_usage = usage.get(user.user_id, _current_year_month())
+    if operation.queue == "gpu":
+        limit_seconds = limits.monthly_gpu_minutes * 60
+        used_seconds = monthly_usage.gpu_seconds
+    else:
+        limit_seconds = limits.monthly_cpu_minutes * 60
+        used_seconds = monthly_usage.cpu_seconds
+    if used_seconds >= limit_seconds:
+        raise ApiError(
+            429,
+            "quota_exceeded",
+            f"You've used your {operation.queue.upper()} time for this month "
+            f"(limit for your plan is {limit_seconds // 60} minutes).",
         )
 
     record = jobs.create(

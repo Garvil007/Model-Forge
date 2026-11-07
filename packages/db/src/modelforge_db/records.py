@@ -86,6 +86,10 @@ class JobRecord:
     ttl: int
     batch_job_id: str | None = None
     retry_count: int = 0
+    # The real cost (USD), computed from Batch's actual cpu_seconds/gpu_seconds once the
+    # job finishes. None until then; cost_estimate above stays the pre-run estimate shown
+    # before the job runs.
+    cost_actual: float | None = None
 
 
 @dataclass(frozen=True)

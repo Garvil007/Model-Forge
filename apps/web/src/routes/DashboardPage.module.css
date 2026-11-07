@@ -15,3 +15,11 @@
   padding: var(--space-10);
   color: var(--muted);
 }
+
+.storagePanel {
+  margin-bottom: var(--space-8);
+}
+
+.sectionPanel {
+  margin-top: var(--space-7);
+}

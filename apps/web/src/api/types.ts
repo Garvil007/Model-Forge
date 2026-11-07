@@ -85,6 +85,7 @@ export type JobErrorCode =
   | 'bad_calibration_data'
   | 'gated_model'
   | 'quota_exceeded'
+  | 'gpu_kill_switch'
   | 'spot_interrupted'
   | 'timeout'
   | 'unknown'
@@ -106,6 +107,22 @@ export interface ApiJob {
   createdAt: string
   result: JobResult | null
   error: JobErrorInfo | null
+  /** USD, dashboard-only — the actual cost once known, falling back to the pre-run estimate. */
+  cost: number | null
+}
+
+export type JobHistoryFilters = {
+  status?: JobStatus
+  /** An operation id, e.g. "q_int8_static" — "technique" in the UI's own words. */
+  operationId?: string
+  dateFrom?: string
+  dateTo?: string
+}
+
+export interface PaginatedJobs {
+  items: ApiJob[]
+  /** Opaque DynamoDB `LastEvaluatedKey` cursor; null once there are no more pages. */
+  nextCursor: string | null
 }
 
 export interface CreateJobRequest {
@@ -119,4 +136,43 @@ export interface ApiErrorBody {
     code: string
     message: string
   }
+}
+
+/** GET /usage — remaining monthly CPU/GPU compute quota, for the dashboard's quota display. */
+export interface ApiUsage {
+  plan: string
+  cpuSecondsUsed: number
+  cpuSecondsLimit: number
+  gpuSecondsUsed: number
+  gpuSecondsLimit: number
+  maxConcurrentJobs: number
+  gpuKillSwitchOn: boolean
+  storageBytesUsed: number
+  storageBytesLimit: number
+  retentionDays: number
+}
+
+export interface NotificationSettings {
+  jobCompleteEmail: boolean
+  weeklyDigestEmail: boolean
+}
+
+/** GET /settings — everything the Settings page needs besides the profile (from `useAuth`). */
+export interface ApiSettings {
+  notifications: NotificationSettings
+  hasHfToken: boolean
+}
+
+export interface UpdateNotificationsRequest {
+  notifications: NotificationSettings
+}
+
+export interface SetHfTokenRequest {
+  token: string
+}
+
+export interface DeleteAccountRequest {
+  /** The user must type this exact word to enable the request — enforced client-side; the
+   * server re-checks it so a forged request can't skip the confirmation either. */
+  confirm: 'DELETE'
 }

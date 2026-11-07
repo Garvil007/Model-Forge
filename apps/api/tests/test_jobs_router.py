@@ -10,7 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 from modelforge_catalog.job_messages import parse_message
 from modelforge_db.exceptions import NotFoundError
-from modelforge_db.records import JobEventRecord, JobRecord, ModelRecord, UserRecord
+from modelforge_db.records import JobEventRecord, JobRecord, ModelRecord, UsageRecord, UserRecord
 
 from app.auth import current_user
 from app.main import app
@@ -137,11 +137,22 @@ class _FakeModelRepository:
 
 
 class _FakeUsageRepository:
-    def __init__(self) -> None:
+    def __init__(self, *, cpu_seconds: int = 0, gpu_seconds: int = 0) -> None:
         self.increments: list[dict[str, Any]] = []
+        self._cpu_seconds = cpu_seconds
+        self._gpu_seconds = gpu_seconds
 
     def increment(self, user_id: str, year_month: str, *, jobs_run: int = 0, **_: Any) -> None:
         self.increments.append({"userId": user_id, "yearMonth": year_month, "jobsRun": jobs_run})
+
+    def get(self, user_id: str, year_month: str) -> UsageRecord:
+        return UsageRecord(
+            user_id=user_id,
+            year_month=year_month,
+            jobs_run=0,
+            cpu_seconds=self._cpu_seconds,
+            gpu_seconds=self._gpu_seconds,
+        )
 
 
 class _FakeJobQueue:
@@ -187,6 +198,7 @@ def fakes() -> Any:
     app.dependency_overrides[jobs_router.get_model_repository] = lambda: model_repo
     app.dependency_overrides[jobs_router.get_usage_repository] = lambda: usage_repo
     app.dependency_overrides[jobs_router.get_job_queue] = lambda: job_queue
+    app.dependency_overrides[jobs_router.get_gpu_kill_switch] = lambda: False
 
     yield {
         "jobs": job_repo,

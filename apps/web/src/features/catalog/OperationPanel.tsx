@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ApiModel } from '../../api/types'
 import { Panel } from '../../ui/Panel/Panel'
 import { Tabs } from '../../ui/Tabs/Tabs'
@@ -9,7 +9,13 @@ import { MethodParams } from './MethodParams'
 import { SizeEstimate } from './SizeEstimate'
 import { TechniqueTable } from './TechniqueTable'
 import { useParamsState } from './paramsReducer'
-import { getConverts, getMethodsForTechnique, getOperationById, getTechniques } from './types'
+import {
+  getConverts,
+  getMethodsForTechnique,
+  getOperationById,
+  getTechniques,
+  type ParamValues,
+} from './types'
 import styles from './OperationPanel.module.css'
 
 const OP_TABS: { id: JobTab; label: string }[] = [
@@ -19,17 +25,44 @@ const OP_TABS: { id: JobTab; label: string }[] = [
 
 export interface OperationPanelProps {
   model: ApiModel
+  /** Prefills the method/convert-target selection and its param values — set when arriving from
+   * the dashboard's "Re-run with edited settings" action. */
+  initialOperationId?: string
+  initialValues?: ParamValues
+  /** Opens directly on Compress or Convert — set when arriving from a dashboard model row's
+   * "Compress"/"Convert" action, independent of any `initialOperationId`. */
+  initialTab?: JobTab
 }
 
 /** The "Method"/"Convert to" section (prototype's `#methods-h`): Compress/Convert tabs, the
  * technique comparison table on Compress, the method/convert-target list, schema-driven params,
  * a live size estimate, and the job runner for whichever operation is selected. */
-export function OperationPanel({ model }: OperationPanelProps) {
-  const [tab, setTab] = useState<JobTab>('compress')
+export function OperationPanel({
+  model,
+  initialOperationId,
+  initialValues,
+  initialTab,
+}: OperationPanelProps) {
+  const initialOperation = initialOperationId ? getOperationById(initialOperationId) : undefined
+  const [tab, setTab] = useState<JobTab>(
+    initialOperation?.technique === 'convert' ? 'convert' : (initialTab ?? 'compress'),
+  )
   const techniques = getTechniques()
-  const [techniqueId, setTechniqueId] = useState(techniques[0]?.id ?? '')
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-  const { valuesFor, ensureDefaults, setValue } = useParamsState()
+  const [techniqueId, setTechniqueId] = useState(
+    initialOperation && initialOperation.technique !== 'convert'
+      ? initialOperation.technique
+      : (techniques[0]?.id ?? ''),
+  )
+  const [selectedId, setSelectedId] = useState<string | null>(initialOperationId ?? null)
+  const { valuesFor, ensureDefaults, setValue, seed } = useParamsState()
+
+  useEffect(() => {
+    if (!initialOperationId) return
+    if (initialValues) seed(initialOperationId, initialValues)
+    else ensureDefaults(initialOperationId, initialOperation?.params)
+    // Seed once, from the values this panel was mounted with — not on every rerender.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const methods = getMethodsForTechnique(techniqueId)
   const converts = getConverts()

@@ -57,6 +57,20 @@ export const apiClient = {
       signal: options?.signal,
     })
   },
+  put<T>(path: string, body?: unknown, options?: RequestOptions): Promise<T> {
+    return request<T>(path, {
+      method: 'PUT',
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: options?.signal,
+    })
+  },
+  delete<T>(path: string, body?: unknown, options?: RequestOptions): Promise<T> {
+    return request<T>(path, {
+      method: 'DELETE',
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: options?.signal,
+    })
+  },
   /** Raw (non-JSON) request for S3-style part uploads — returns the `Response` so callers can
    * read headers like `ETag`, and never tries to parse a body. */
   async putRaw(path: string, body: Blob, options?: RequestOptions): Promise<Response> {

@@ -133,6 +133,22 @@ class JobRepository:
             raise
         return _to_record(response["Attributes"])
 
+    def set_actual_cost(self, user_id: str, job_id: str, cost_actual: float) -> JobRecord:
+        try:
+            response = self._table.update_item(
+                Key={"PK": user_pk(user_id), "SK": job_sk(job_id)},
+                UpdateExpression="SET costActual = :costActual",
+                ConditionExpression="attribute_exists(PK)",
+                ExpressionAttributeValues={":costActual": decimalize(cost_actual)},
+                ReturnValues="ALL_NEW",
+            )
+        except ClientError as error_:
+            raise_not_found_on_condition_failure(
+                error_, f"job {job_id!r} not found for user {user_id!r}"
+            )
+            raise
+        return _to_record(response["Attributes"])
+
     def increment_retry_count(self, user_id: str, job_id: str) -> JobRecord:
         try:
             response = self._table.update_item(
@@ -171,4 +187,5 @@ def _to_record(item: dict[str, Any]) -> JobRecord:
         ttl=int(item["ttl"]),
         batch_job_id=item.get("batchJobId"),
         retry_count=int(item.get("retryCount", 0)),
+        cost_actual=(float(item["costActual"]) if item.get("costActual") is not None else None),
     )

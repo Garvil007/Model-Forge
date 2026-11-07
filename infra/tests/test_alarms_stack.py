@@ -43,6 +43,7 @@ def _synth_template() -> Template:
         dispatcher_function=dispatcher_fn,
         api_function=api_fn,
         budget_notification_email="test@example.com",
+        cost_report_code_path=".",
         env=_ENV,
     )
     return Template.from_stack(stack)

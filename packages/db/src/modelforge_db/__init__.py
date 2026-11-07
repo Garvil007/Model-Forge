@@ -5,6 +5,7 @@ from __future__ import annotations
 from .client import GSI1_NAME, TABLE_NAME, get_dynamodb_resource, get_kms_client, get_table
 from .encryption import KmsEncryptor
 from .exceptions import ModelForgeDbError, NotFoundError
+from .kill_switch import gpu_kill_switch_enabled, kill_switch_parameter_name
 from .records import (
     DatasetRecord,
     JobEventRecord,
@@ -31,6 +32,8 @@ __all__ = [
     "KmsEncryptor",
     "ModelForgeDbError",
     "NotFoundError",
+    "gpu_kill_switch_enabled",
+    "kill_switch_parameter_name",
     "UserRecord",
     "ModelRecord",
     "DatasetRecord",

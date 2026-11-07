@@ -35,19 +35,30 @@ from __future__ import annotations
 
 from typing import Any
 
-from aws_cdk import BundlingOptions, Duration, RemovalPolicy, Size, Stack
+from aws_cdk import BundlingOptions, Duration, RemovalPolicy, Size, Stack, Tags
 from aws_cdk import aws_batch as batch
 from aws_cdk import aws_ec2 as ec2
 from aws_cdk import aws_ecr as ecr
 from aws_cdk import aws_ecs as ecs
+from aws_cdk import aws_events as events
+from aws_cdk import aws_events_targets as events_targets
 from aws_cdk import aws_iam as iam
 from aws_cdk import aws_lambda as lambda_
 from aws_cdk import aws_lambda_event_sources as lambda_events
 from aws_cdk import aws_sqs as sqs
+from aws_cdk import aws_ssm as ssm
 from constructs import Construct
 
 _WORKER_IMAGES = ("cpu-torch", "cpu-tf", "cpu-convert", "cpu-llm", "gpu-base", "tensorrt")
+_GPU_WORKER_IMAGES = ("gpu-base", "tensorrt")
 _QUEUES = ("cpu", "gpu")
+# g6.xlarge/g5.xlarge: 4 vCPU, 1 GPU each. maxv_cpus=4 caps the GPU compute environment at
+# one instance at a time — matches the account's requested G/VT Spot quota (see
+# docs/decisions.md's "Day 20" entry). Raise alongside an actual quota increase, not before.
+_GPU_INSTANCE_TYPES = [ec2.InstanceType("g6.xlarge"), ec2.InstanceType("g5.xlarge")]
+_GPU_MAX_VCPUS = 4
+_GPU_CONTAINER_VCPUS = 4
+_GPU_CONTAINER_MEMORY = Size.gibibytes(14)  # leaves headroom under the 16 GiB instance for ECS
 
 
 def _construct_name(worker_image: str) -> str:
@@ -71,11 +82,19 @@ class BatchStack(Stack):
         cpu_jobs_queue: sqs.IQueue,
         gpu_jobs_queue: sqs.IQueue,
         dispatcher_code_path: str,
+        gpu_on_demand_fallback_enabled: bool = False,
         **kwargs: Any,
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
         is_dev = env_name == "dev"
 
+        # No cost-allocation tags on this one: AWS::Batch::ComputeEnvironment doesn't
+        # support in-place tag updates, and this resource has a fixed
+        # `compute_environment_name` — CloudFormation refuses to replace a
+        # custom-named resource in an update ("Rename ... and update the stack again"),
+        # confirmed live. Safe to skip: it's the only queue on this CE, so Cost
+        # Explorer's service-level breakdown already identifies its spend as Batch/EC2
+        # Fargate without needing the tag.
         compute_environment = batch.FargateComputeEnvironment(
             self,
             "WorkerComputeEnvironment",
@@ -86,19 +105,88 @@ class BatchStack(Stack):
             compute_environment_name=f"modelforge-worker-compute-{env_name}",
         )
 
-        self.job_queues: dict[str, batch.JobQueue] = {
-            q: batch.JobQueue(
+        # GPU jobs need an EC2 (not Fargate) compute environment — Fargate has no GPU
+        # support. Spot is the primary (and only enabled-by-default) path; an on-demand
+        # fallback compute environment can be added at lower priority (order=2), but
+        # only when explicitly turned on — AWS Batch requires a compute environment to
+        # be *created* in ENABLED state (confirmed live: `enabled=False` at creation is
+        # rejected with "Compute Environment must be created in ENABLED state"), so
+        # "disabled by default" means this resource isn't created at all until asked
+        # for, not that it exists sitting disabled. This also means a Spot capacity
+        # shortage degrades to "GPU jobs wait" rather than silently falling back to
+        # on-demand pricing (~3x the Spot price) without anyone asking for that.
+        gpu_spot_compute_environment = batch.ManagedEc2EcsComputeEnvironment(
+            self,
+            "GpuSpotComputeEnvironment",
+            vpc=vpc,
+            vpc_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PUBLIC),
+            security_groups=[worker_security_group],
+            instance_types=_GPU_INSTANCE_TYPES,
+            use_optimal_instance_classes=False,
+            spot=True,
+            minv_cpus=0,
+            maxv_cpus=_GPU_MAX_VCPUS,
+            compute_environment_name=f"modelforge-gpu-spot-compute-{env_name}",
+        )
+        Tags.of(gpu_spot_compute_environment).add("mf:queue", "gpu")
+        Tags.of(gpu_spot_compute_environment).add("mf:project", "modelforge")
+
+        gpu_compute_environment_orders = [
+            batch.OrderedComputeEnvironment(
+                compute_environment=gpu_spot_compute_environment, order=1
+            )
+        ]
+        if gpu_on_demand_fallback_enabled:
+            gpu_on_demand_compute_environment = batch.ManagedEc2EcsComputeEnvironment(
                 self,
-                f"{q.title()}JobQueue",
-                job_queue_name=f"{q}-queue",
+                "GpuOnDemandComputeEnvironment",
+                vpc=vpc,
+                vpc_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PUBLIC),
+                security_groups=[worker_security_group],
+                instance_types=_GPU_INSTANCE_TYPES,
+                use_optimal_instance_classes=False,
+                spot=False,
+                minv_cpus=0,
+                maxv_cpus=_GPU_MAX_VCPUS,
+                compute_environment_name=f"modelforge-gpu-ondemand-compute-{env_name}",
+            )
+            Tags.of(gpu_on_demand_compute_environment).add("mf:queue", "gpu")
+            Tags.of(gpu_on_demand_compute_environment).add("mf:project", "modelforge")
+            gpu_compute_environment_orders.append(
+                batch.OrderedComputeEnvironment(
+                    compute_environment=gpu_on_demand_compute_environment, order=2
+                )
+            )
+
+        self.job_queues: dict[str, batch.JobQueue] = {
+            "cpu": batch.JobQueue(
+                self,
+                "CpuJobQueue",
+                job_queue_name="cpu-queue",
                 compute_environments=[
                     batch.OrderedComputeEnvironment(
                         compute_environment=compute_environment, order=1
                     )
                 ],
-            )
-            for q in _QUEUES
+            ),
+            "gpu": batch.JobQueue(
+                self,
+                "GpuJobQueue",
+                job_queue_name="gpu-queue",
+                compute_environments=gpu_compute_environment_orders,
+            ),
         }
+
+        self.gpu_kill_switch = ssm.StringParameter(
+            self,
+            "GpuKillSwitch",
+            parameter_name=f"/modelforge/{env_name}/gpu-kill-switch",
+            string_value="off",
+            description=(
+                "Set to 'on' to stop new GPU jobs being queued (checked by POST /jobs and "
+                "the dispatcher). See modelforge_db.kill_switch."
+            ),
+        )
 
         job_role = iam.Role(
             self,
@@ -144,49 +232,67 @@ class BatchStack(Stack):
             )
             self.ecr_repositories[worker_image] = repo
 
-            container = batch.EcsFargateContainerDefinition(
-                self,
-                f"{name}Container",
-                image=ecs.ContainerImage.from_ecr_repository(repo, "latest"),
-                cpu=1,
-                memory=Size.gibibytes(2),
-                job_role=job_role,
-                # Ref::message resolves from the SubmitJob-time `message` parameter
-                # the dispatcher sends (see batch_client.RealBatchJobClient.submit_job)
-                # — the real SQS message body telling this one-shot container which
-                # job to run (core/runner.py's sys.argv[1] one-shot branch). Must be
-                # in `command`, not `environment`: confirmed live that AWS Batch only
-                # resolves `Ref::` placeholders in the command array — as an
-                # environment variable value it arrived as the literal unsubstituted
-                # string "Ref::message". And it must be ONLY the message, not
-                # ["python", "-m", "core.runner", "Ref::message"]: every worker
-                # Dockerfile already sets `ENTRYPOINT ["python", "-m", "core.runner"]`,
-                # and ECS appends `command` to `ENTRYPOINT` rather than replacing it —
-                # confirmed live that the actual argv became
-                # ["python", "-m", "core.runner", "python", "-m", "core.runner", "<msg>"],
-                # so sys.argv[1] was the literal string "python", not the message.
-                command=["Ref::message"],
-                # Confirmed live: every `workers/ops/*.py` module reads
-                # MF_UPLOADS_BUCKET/MF_RESULTS_BUCKET via `os.environ.get(..., "mf-uploads"/
-                # "mf-results")` (the LocalStack dev bucket names) — without these set, a
-                # real job's download/upload hit a bucket that doesn't exist in this AWS
-                # account at all, surfacing as a confusing "403 Forbidden" HeadObject error
-                # (S3 masks "no such bucket" as 403 rather than 404 when the caller has no
-                # permission on that bucket name either) rather than a clear "bucket not
-                # found".
-                environment={
+            # `Ref::message` resolves from the SubmitJob-time `message` parameter the
+            # dispatcher sends (see batch_client.RealBatchJobClient.submit_job) — the
+            # real SQS message body telling this one-shot container which job to run
+            # (core/runner.py's sys.argv[1] one-shot branch). Must be in `command`, not
+            # `environment`: confirmed live that AWS Batch only resolves `Ref::`
+            # placeholders in the command array — as an environment variable value it
+            # arrived as the literal unsubstituted string "Ref::message". And it must be
+            # ONLY the message, not ["python", "-m", "core.runner", "Ref::message"]:
+            # every worker Dockerfile already sets
+            # `ENTRYPOINT ["python", "-m", "core.runner"]`, and ECS appends `command` to
+            # `ENTRYPOINT` rather than replacing it — confirmed live that the actual argv
+            # became ["python", "-m", "core.runner", "python", "-m", "core.runner",
+            # "<msg>"], so sys.argv[1] was the literal string "python", not the message.
+            # Confirmed live: every `workers/ops/*.py` module reads
+            # MF_UPLOADS_BUCKET/MF_RESULTS_BUCKET via `os.environ.get(..., "mf-uploads"/
+            # "mf-results")` (the LocalStack dev bucket names) — without these set, a
+            # real job's download/upload hit a bucket that doesn't exist in this AWS
+            # account at all, surfacing as a confusing "403 Forbidden" HeadObject error
+            # (S3 masks "no such bucket" as 403 rather than 404 when the caller has no
+            # permission on that bucket name either) rather than a clear "bucket not
+            # found".
+            shared_container_kwargs: dict[str, Any] = {
+                "image": ecs.ContainerImage.from_ecr_repository(repo, "latest"),
+                "job_role": job_role,
+                "command": ["Ref::message"],
+                "environment": {
                     "MF_UPLOADS_BUCKET": uploads_bucket_name,
                     "MF_RESULTS_BUCKET": results_bucket_name,
                     "MF_AWS_REGION": self.region,
                 },
-                # Required: these tasks run in NetworkStack's public-only subnets with no
-                # NAT gateway (see docs/decisions.md). `assign_public_ip` defaults to False
-                # on this construct regardless of subnet type, which left the first real
-                # job here unable to even pull its own image — confirmed live via a real
-                # Batch FAILED job: "ResourceInitializationError: unable to pull secrets
-                # or registry auth: ... dial tcp ...: i/o timeout" reaching ECR.
-                assign_public_ip=True,
-            )
+            }
+            if worker_image in _GPU_WORKER_IMAGES:
+                # GPU jobs run on the EC2 compute environments above — Fargate has no
+                # GPU support. `gpu=1` reserves the instance's one GPU for this
+                # container; `assign_public_ip` doesn't apply to EC2 launch type (the
+                # instance itself gets a public IP from the public subnet, same as the
+                # Fargate tasks below).
+                container = batch.EcsEc2ContainerDefinition(
+                    self,
+                    f"{name}Container",
+                    cpu=_GPU_CONTAINER_VCPUS,
+                    memory=_GPU_CONTAINER_MEMORY,
+                    gpu=1,
+                    **shared_container_kwargs,
+                )
+            else:
+                container = batch.EcsFargateContainerDefinition(
+                    self,
+                    f"{name}Container",
+                    cpu=1,
+                    memory=Size.gibibytes(2),
+                    # Required: these tasks run in NetworkStack's public-only subnets
+                    # with no NAT gateway (see docs/decisions.md). `assign_public_ip`
+                    # defaults to False on this construct regardless of subnet type,
+                    # which left the first real job here unable to even pull its own
+                    # image — confirmed live via a real Batch FAILED job:
+                    # "ResourceInitializationError: unable to pull secrets or registry
+                    # auth: ... dial tcp ...: i/o timeout" reaching ECR.
+                    assign_public_ip=True,
+                    **shared_container_kwargs,
+                )
             self.job_definitions[worker_image] = batch.EcsJobDefinition(
                 self,
                 f"{name}JobDefinition",
@@ -235,6 +341,7 @@ class BatchStack(Stack):
                 resources=[table_arn],
             )
         )
+        self.gpu_kill_switch.grant_read(dispatcher_role)
 
         self.dispatcher = lambda_.Function(
             self,
@@ -270,11 +377,81 @@ class BatchStack(Stack):
             ),
             role=dispatcher_role,
             timeout=Duration.seconds(30),
-            environment={"MF_BATCH_CLIENT": "real"},
+            environment={"MF_BATCH_CLIENT": "real", "MF_ENV_NAME": env_name},
         )
         self.dispatcher.add_event_source(
             lambda_events.SqsEventSource(cpu_jobs_queue, batch_size=1)
         )
         self.dispatcher.add_event_source(
             lambda_events.SqsEventSource(gpu_jobs_queue, batch_size=1)
+        )
+
+        cost_recorder_role = iam.Role(
+            self,
+            "CostRecorderRole",
+            assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
+            managed_policies=[
+                iam.ManagedPolicy.from_aws_managed_policy_name(
+                    "service-role/AWSLambdaBasicExecutionRole"
+                )
+            ],
+        )
+        cost_recorder_role.add_to_policy(
+            iam.PolicyStatement(
+                actions=["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem"],
+                resources=[table_arn],
+            )
+        )
+
+        self.cost_recorder = lambda_.Function(
+            self,
+            "CostRecorderFunction",
+            function_name=f"modelforge-cost-recorder-{env_name}",
+            runtime=lambda_.Runtime.PYTHON_3_12,
+            handler="cost_recorder.handler.handler",
+            code=lambda_.Code.from_asset(
+                dispatcher_code_path,
+                exclude=[
+                    ".git",
+                    ".github",
+                    ".claude",
+                    ".ruff_cache",
+                    "**/__pycache__",
+                    "**/.pytest_cache",
+                    "**/*.egg-info",
+                    "apps",
+                    "workers",
+                    "docs",
+                    "infra/cdk.out",
+                ],
+                bundling=BundlingOptions(
+                    image=lambda_.Runtime.PYTHON_3_12.bundling_image,
+                    command=[
+                        "bash",
+                        "-c",
+                        "pip install --no-cache-dir --no-deps "
+                        "packages/catalog packages/db infra/lambda/cost_recorder "
+                        "-t /asset-output",
+                    ],
+                ),
+            ),
+            role=cost_recorder_role,
+            timeout=Duration.seconds(30),
+        )
+        # Batch's own "Job State Change" events — fired for every job in this account,
+        # so the rule filters to this stack's two queues and the terminal statuses the
+        # handler actually acts on (see cost_recorder/handler.py's docstring for why the
+        # job/user id come from `detail.parameters.message`, not the event's `jobName`).
+        events.Rule(
+            self,
+            "BatchJobStateChangeRule",
+            event_pattern=events.EventPattern(
+                source=["aws.batch"],
+                detail_type=["Batch Job State Change"],
+                detail={
+                    "status": ["SUCCEEDED", "FAILED"],
+                    "jobQueue": [jq.job_queue_arn for jq in self.job_queues.values()],
+                },
+            ),
+            targets=[events_targets.LambdaFunction(self.cost_recorder)],
         )
