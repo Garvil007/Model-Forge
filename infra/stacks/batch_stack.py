@@ -193,10 +193,28 @@ class BatchStack(Stack):
             "WorkerJobRole",
             assumed_by=iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
         )
+        # Least privilege by direction, not just by bucket: every worker op only ever
+        # downloads from `uploads_bucket` and uploads to `results_bucket` (see
+        # `workers/ops/_convert_common.py::_run_in_tempdir`'s `s3.download_file`/
+        # `s3.upload_file` calls) — it never needs to overwrite another user's upload or
+        # read another user's already-produced result. Splitting the actions removes
+        # both of those unused, unnecessarily broad grants. This role is still shared by
+        # every job on this job definition (static at Batch job-definition deploy time,
+        # not per-SubmitJob), so it is NOT scoped to a single job's own S3 prefix — true
+        # per-job scoping would need the dispatcher to mint per-job scoped credentials
+        # (e.g. an STS AssumeRole session policy keyed on job/user id) at SubmitJob time,
+        # which is a real architecture change, not a policy tweak; tracked as residual
+        # risk rather than done here.
         job_role.add_to_policy(
             iam.PolicyStatement(
-                actions=["s3:GetObject", "s3:PutObject"],
-                resources=[f"{uploads_bucket_arn}/*", f"{results_bucket_arn}/*"],
+                actions=["s3:GetObject"],
+                resources=[f"{uploads_bucket_arn}/*"],
+            )
+        )
+        job_role.add_to_policy(
+            iam.PolicyStatement(
+                actions=["s3:PutObject"],
+                resources=[f"{results_bucket_arn}/*"],
             )
         )
         job_role.add_to_policy(

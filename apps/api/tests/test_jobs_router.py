@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import pytest
+from fakes import FakeRateLimitRepository
 from fastapi.testclient import TestClient
 from modelforge_catalog.job_messages import parse_message
 from modelforge_db.exceptions import NotFoundError
@@ -14,6 +15,7 @@ from modelforge_db.records import JobEventRecord, JobRecord, ModelRecord, UsageR
 
 from app.auth import current_user
 from app.main import app
+from app.rate_limit import get_rate_limit_repository
 from app.routers import jobs as jobs_router
 
 client = TestClient(app)
@@ -199,6 +201,7 @@ def fakes() -> Any:
     app.dependency_overrides[jobs_router.get_usage_repository] = lambda: usage_repo
     app.dependency_overrides[jobs_router.get_job_queue] = lambda: job_queue
     app.dependency_overrides[jobs_router.get_gpu_kill_switch] = lambda: False
+    app.dependency_overrides[get_rate_limit_repository] = FakeRateLimitRepository
 
     yield {
         "jobs": job_repo,

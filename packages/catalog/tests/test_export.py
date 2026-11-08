@@ -40,7 +40,17 @@ def test_dataset_param_type_emits_string_schema_with_dataset_description() -> No
     op = next(m for m in METHODS if m.id == "q_int8_static")
     schema = build_param_schema(op)
     calib_schema = schema["properties"]["calib"]
-    assert calib_schema == {"type": "string", "description": "Id of an owned dataset"}
+    assert calib_schema == {
+        "type": "string",
+        "maxLength": 128,
+        "description": "Id of an owned dataset",
+    }
+
+
+def test_param_schema_rejects_additional_properties() -> None:
+    for op in (*METHODS, *CONVERTS):
+        schema = build_param_schema(op)
+        assert schema["additionalProperties"] is False
 
 
 def test_catalog_schema_param_type_enum_includes_dataset() -> None:

@@ -18,6 +18,7 @@ from modelforge_db.repositories.users import UserRepository
 
 from ..auth import current_user, get_user_repository
 from ..config import Settings, get_settings
+from ..rate_limit import rate_limit
 from ..stripe_client import get_stripe_secret_key, get_stripe_webhook_secret
 
 router = APIRouter(prefix="/billing", tags=["billing"])
@@ -43,7 +44,18 @@ def list_plans() -> list[dict[str, Any]]:
     ]
 
 
-@router.post("/checkout-session")
+@router.post(
+    "/checkout-session",
+    dependencies=[
+        rate_limit(
+            "billing.checkout_session",
+            user_limit=5,
+            user_window_seconds=60,
+            ip_limit=20,
+            ip_window_seconds=60,
+        )
+    ],
+)
 def create_checkout_session(
     user: Annotated[UserRecord, Depends(current_user)],
     settings: Annotated[Settings, Depends(get_settings)],
@@ -71,7 +83,18 @@ def create_checkout_session(
     return {"url": session.url}
 
 
-@router.post("/portal-session")
+@router.post(
+    "/portal-session",
+    dependencies=[
+        rate_limit(
+            "billing.portal_session",
+            user_limit=5,
+            user_window_seconds=60,
+            ip_limit=20,
+            ip_window_seconds=60,
+        )
+    ],
+)
 def create_portal_session(
     user: Annotated[UserRecord, Depends(current_user)],
     settings: Annotated[Settings, Depends(get_settings)],

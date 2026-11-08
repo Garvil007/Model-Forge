@@ -20,6 +20,7 @@ from .repositories.datasets import DatasetRepository
 from .repositories.job_events import JobEventRepository
 from .repositories.jobs import JobRepository
 from .repositories.models import ModelRepository
+from .repositories.rate_limits import RateLimitRepository
 from .repositories.uploads import UploadRepository
 from .repositories.usage import UsageRepository
 from .repositories.users import UserRepository
@@ -50,4 +51,5 @@ __all__ = [
     "UsageRepository",
     "UploadRepository",
     "BillingEventRepository",
+    "RateLimitRepository",
 ]

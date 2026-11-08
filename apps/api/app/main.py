@@ -10,6 +10,7 @@ from modelforge_db.records import UserRecord
 from .auth import assert_local_auth_allowed, current_user
 from .config import get_settings
 from .errors import register_error_handlers
+from .middleware import MaxBodySizeMiddleware
 from .routers import billing, catalog, datasets, jobs, models, uploads, usage
 
 
@@ -18,6 +19,7 @@ def create_app() -> FastAPI:
     assert_local_auth_allowed(settings)  # fail at startup, not on the first request
     app = FastAPI(title=settings.app_name)
     register_error_handlers(app)
+    app.add_middleware(MaxBodySizeMiddleware)
 
     if settings.environment == "local":
         app.add_middleware(

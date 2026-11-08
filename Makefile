@@ -1,4 +1,4 @@
-.PHONY: up down api web worker test lint shot shot-stories shot-authed storybook types e2e e2e-jobs lhci
+.PHONY: up down api web worker test lint shot shot-stories shot-authed storybook types e2e e2e-jobs lhci load-test
 
 up:
 	docker compose up -d
@@ -57,3 +57,9 @@ e2e-jobs:
 
 lhci:
 	npm run lhci --prefix apps/web
+
+# Basic load smoke test of the API (health + catalog only — see scripts/load/api-smoke.js).
+# Requires the k6 binary (https://k6.io) and MF_API_URL, e.g.:
+#   make load-test MF_API_URL=https://dev-api.example.com
+load-test:
+	MF_API_URL=$(MF_API_URL) k6 run scripts/load/api-smoke.js

@@ -135,7 +135,21 @@ class ApiStack(Stack):
             self,
             "HttpApi",
             api_name=f"modelforge-api-{env_name}",
-            create_default_stage=True,
+            # No create_default_stage here: the default ($default) stage is created
+            # below instead, so it can carry throttling settings (HttpApi itself has no
+            # throttle prop). This is an account/stage-wide flood backstop — it isn't
+            # per-user or per-IP (see apps/api/app/rate_limit.py for that) and isn't a
+            # substitute for the per-IP WAF rate rule on the CloudFront distribution in
+            # front of this API (see web_stack.py).
+            create_default_stage=False,
+        )
+        apigwv2.HttpStage(
+            self,
+            "DefaultStage",
+            http_api=http_api,
+            stage_name="$default",
+            auto_deploy=True,
+            throttle=apigwv2.ThrottleSettings(rate_limit=100, burst_limit=200),
         )
         http_api.add_routes(
             path="/{proxy+}", methods=[apigwv2.HttpMethod.ANY], integration=integration

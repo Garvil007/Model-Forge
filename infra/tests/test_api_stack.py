@@ -74,3 +74,20 @@ def test_no_reserved_concurrency_configured():
 def test_http_api_exists():
     template = _synth_template()
     template.resource_count_is("AWS::ApiGatewayV2::Api", 1)
+
+
+def test_default_stage_has_throttle_settings():
+    # Account/stage-wide flood backstop — see api_stack.py's module docstring on why
+    # this isn't a substitute for per-user/per-IP limiting.
+    template = _synth_template()
+    template.has_resource_properties(
+        "AWS::ApiGatewayV2::Stage",
+        Match.object_like(
+            {
+                "StageName": "$default",
+                "DefaultRouteSettings": Match.object_like(
+                    {"ThrottlingRateLimit": 100, "ThrottlingBurstLimit": 200}
+                ),
+            }
+        ),
+    )

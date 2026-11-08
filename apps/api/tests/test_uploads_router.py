@@ -6,12 +6,14 @@ from datetime import UTC, datetime
 from typing import Any
 
 import pytest
+from fakes import FakeRateLimitRepository
 from fastapi.testclient import TestClient
 from modelforge_db.exceptions import NotFoundError
 from modelforge_db.records import DatasetRecord, ModelRecord, UploadRecord, UserRecord
 
 from app.auth import current_user
 from app.main import app
+from app.rate_limit import get_rate_limit_repository
 from app.routers import uploads as uploads_router
 
 client = TestClient(app)
@@ -167,6 +169,7 @@ def fakes() -> Any:
     app.dependency_overrides[uploads_router.get_dataset_repository] = lambda: dataset_repo
     app.dependency_overrides[uploads_router.get_storage_service] = lambda: storage
     app.dependency_overrides[uploads_router.get_job_queue] = lambda: job_queue
+    app.dependency_overrides[get_rate_limit_repository] = FakeRateLimitRepository
 
     yield {
         "uploads": upload_repo,

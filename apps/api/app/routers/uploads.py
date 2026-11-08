@@ -28,6 +28,7 @@ from pydantic.alias_generators import to_camel
 from ..auth import current_user
 from ..config import Settings, get_settings
 from ..errors import ApiError
+from ..rate_limit import rate_limit
 from ..services import (
     FileTooLargeError,
     JobQueueService,
@@ -96,7 +97,19 @@ def _retention_days_for(plan: str) -> int:
     return limits_for(plan).retention_days
 
 
-@router.post("", status_code=201)
+@router.post(
+    "",
+    status_code=201,
+    dependencies=[
+        rate_limit(
+            "uploads.create",
+            user_limit=20,
+            user_window_seconds=60,
+            ip_limit=60,
+            ip_window_seconds=60,
+        )
+    ],
+)
 def create_upload(
     body: CreateUploadRequest,
     user: Annotated[UserRecord, Depends(current_user)],
@@ -141,7 +154,19 @@ def create_upload(
     }
 
 
-@router.post("/{upload_id}/complete", status_code=201)
+@router.post(
+    "/{upload_id}/complete",
+    status_code=201,
+    dependencies=[
+        rate_limit(
+            "uploads.complete",
+            user_limit=30,
+            user_window_seconds=60,
+            ip_limit=90,
+            ip_window_seconds=60,
+        )
+    ],
+)
 def complete_upload(
     upload_id: str,
     body: CompleteUploadRequest,

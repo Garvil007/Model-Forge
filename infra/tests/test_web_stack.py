@@ -94,6 +94,88 @@ def test_api_behavior_strips_prefix_at_the_edge():
     )
 
 
+def test_content_security_policy_has_no_unsafe_inline_script_or_style():
+    template = _synth_template()
+    template.has_resource_properties(
+        "AWS::CloudFront::ResponseHeadersPolicy",
+        Match.object_like(
+            {
+                "ResponseHeadersPolicyConfig": Match.object_like(
+                    {
+                        "SecurityHeadersConfig": Match.object_like(
+                            {
+                                "ContentSecurityPolicy": Match.object_like(
+                                    {
+                                        "ContentSecurityPolicy": Match.string_like_regexp(
+                                            r"script-src 'self';"
+                                        ),
+                                        "Override": True,
+                                    }
+                                )
+                            }
+                        )
+                    }
+                )
+            }
+        ),
+    )
+    template.has_resource_properties(
+        "AWS::CloudFront::ResponseHeadersPolicy",
+        Match.object_like(
+            {
+                "ResponseHeadersPolicyConfig": Match.object_like(
+                    {
+                        "SecurityHeadersConfig": Match.object_like(
+                            {
+                                "ContentSecurityPolicy": Match.object_like(
+                                    {
+                                        "ContentSecurityPolicy": Match.string_like_regexp(
+                                            r"style-src 'self';"
+                                        ),
+                                    }
+                                )
+                            }
+                        )
+                    }
+                )
+            }
+        ),
+    )
+
+
+def test_cloudfront_distribution_has_a_per_ip_rate_limit_web_acl():
+    template = _synth_template()
+    template.has_resource_properties(
+        "AWS::WAFv2::WebACL",
+        Match.object_like(
+            {
+                "Scope": "CLOUDFRONT",
+                "Rules": Match.array_with(
+                    [
+                        Match.object_like(
+                            {
+                                "Statement": Match.object_like(
+                                    {
+                                        "RateBasedStatement": Match.object_like(
+                                            {"AggregateKeyType": "IP"}
+                                        )
+                                    }
+                                )
+                            }
+                        )
+                    ]
+                ),
+            }
+        ),
+    )
+    template.has_resource_properties(
+        "AWS::CloudFront::Distribution",
+        Match.object_like(
+            {"DistributionConfig": Match.object_like({"WebACLId": Match.any_value()})}
+        ),
+    )
+
+
 def test_spa_fallback_error_responses_present():
     template = _synth_template()
     template.has_resource_properties(

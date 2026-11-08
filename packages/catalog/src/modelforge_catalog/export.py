@@ -117,11 +117,17 @@ def _param_schema(p: ParamSpec) -> dict[str, Any]:
             schema["maximum"] = p.max
         return schema
     if p.type == "text":
-        return {"type": "string"}
+        # No catalog param currently needs more than a short identifier/label here; cap it
+        # so a client can't stuff an oversized string into a stored JobRecord's `params`.
+        return {"type": "string", "maxLength": 512}
     if p.type == "file":
-        return {"type": "string", "description": "Uploaded object key or filename"}
+        return {
+            "type": "string",
+            "maxLength": 512,
+            "description": "Uploaded object key or filename",
+        }
     if p.type == "dataset":
-        return {"type": "string", "description": "Id of an owned dataset"}
+        return {"type": "string", "maxLength": 128, "description": "Id of an owned dataset"}
     raise ValueError(f"Unknown param type: {p.type}")  # pragma: no cover - exhaustive above
 
 
@@ -134,6 +140,11 @@ def build_param_schema(op: OperationSpec) -> dict[str, Any]:
         "title": op.label,
         "type": "object",
         "properties": properties,
+        # Reject any key not declared on this operation's params — without this, a client
+        # could smuggle arbitrary extra keys into `values`, which get stored verbatim in
+        # the job's `params` and handed to the worker (see apps/api/app/routers/jobs.py and
+        # services.py's JobRecord.create). Only the declared params are a validated contract.
+        "additionalProperties": False,
     }
     if required:
         schema["required"] = required

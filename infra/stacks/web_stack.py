@@ -22,6 +22,7 @@ from aws_cdk import aws_apigatewayv2 as apigwv2
 from aws_cdk import aws_cloudfront as cloudfront
 from aws_cdk import aws_cloudfront_origins as origins
 from aws_cdk import aws_s3 as s3
+from aws_cdk import aws_wafv2 as wafv2
 from constructs import Construct
 
 
@@ -53,6 +54,33 @@ class WebStack(Stack):
             auto_delete_objects=is_dev,
         )
 
+        # script-src/style-src have no 'unsafe-inline': index.html has no inline <script> (just
+        # the module entrypoint), and the SPA's CSS comes entirely from CSS Modules <link>
+        # stylesheets, never injected <style> blocks. `style-src-attr` is relaxed on its own
+        # (CSP3 lets browsers split the style-src-attr/style-src-elem checks) because several
+        # components set the `style` attribute directly for runtime-computed values (progress bar
+        # widths, skeleton sizes) — those values are always numbers interpolated by our own code,
+        # never raw user input, so this doesn't reopen a script-injection path; see
+        # docs/SECURITY.md for the residual-risk note. connect-src covers same-origin API calls
+        # plus the three other origins the SPA actually talks to: Cognito's hosted-UI/token
+        # domain, the Cognito IDP API Amplify calls directly, and presigned S3 URLs for
+        # multipart model uploads (see useFileUpload.ts / client.ts putPresigned).
+        content_security_policy = (
+            "default-src 'self'; "
+            "script-src 'self'; "
+            "style-src 'self'; "
+            "style-src-attr 'unsafe-inline'; "
+            "img-src 'self' data:; "
+            "font-src 'self'; "
+            "connect-src 'self' https://*.amazoncognito.com https://cognito-idp.*.amazonaws.com "
+            "https://*.s3.amazonaws.com https://*.s3.*.amazonaws.com; "
+            "object-src 'none'; "
+            "base-uri 'none'; "
+            "form-action 'self'; "
+            "frame-ancestors 'none'; "
+            "upgrade-insecure-requests"
+        )
+
         security_headers = cloudfront.ResponseHeadersPolicy(
             self,
             "SecurityHeadersPolicy",
@@ -71,6 +99,10 @@ class WebStack(Stack):
                 ),
                 referrer_policy=cloudfront.ResponseHeadersReferrerPolicy(
                     referrer_policy=cloudfront.HeadersReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN,
+                    override=True,
+                ),
+                content_security_policy=cloudfront.ResponseHeadersContentSecurityPolicy(
+                    content_security_policy=content_security_policy,
                     override=True,
                 ),
             ),
@@ -108,9 +140,51 @@ class WebStack(Stack):
             ),
         )
 
+        # Per-IP rate limiting at the edge: CloudFront fronts both the static site and
+        # "/api/*" (see api_stack.py's module docstring on why its own throttling can
+        # only be an account-wide backstop, not per-IP). A WAFv2 Web ACL for CloudFront
+        # must be created in us-east-1 regardless of where this stack otherwise deploys
+        # — see infra/app.py, which defaults CDK_DEFAULT_REGION to us-east-1.
+        rate_limit_waf = wafv2.CfnWebACL(
+            self,
+            "RateLimitWebAcl",
+            name=f"modelforge-rate-limit-{env_name}",
+            scope="CLOUDFRONT",
+            default_action=wafv2.CfnWebACL.DefaultActionProperty(allow={}),
+            visibility_config=wafv2.CfnWebACL.VisibilityConfigProperty(
+                cloud_watch_metrics_enabled=True,
+                metric_name=f"modelforge-rate-limit-{env_name}",
+                sampled_requests_enabled=True,
+            ),
+            rules=[
+                wafv2.CfnWebACL.RuleProperty(
+                    name="PerIpRateLimit",
+                    priority=0,
+                    action=wafv2.CfnWebACL.RuleActionProperty(block={}),
+                    statement=wafv2.CfnWebACL.StatementProperty(
+                        rate_based_statement=wafv2.CfnWebACL.RateBasedStatementProperty(
+                            # Requests from one IP in a rolling 5-minute window, across
+                            # the whole site (assets + "/api/*"); app.rate_limit's
+                            # per-endpoint limits are much tighter for the write
+                            # endpoints that actually cost money to abuse.
+                            limit=2000,
+                            evaluation_window_sec=300,
+                            aggregate_key_type="IP",
+                        )
+                    ),
+                    visibility_config=wafv2.CfnWebACL.VisibilityConfigProperty(
+                        cloud_watch_metrics_enabled=True,
+                        metric_name=f"modelforge-rate-limit-per-ip-{env_name}",
+                        sampled_requests_enabled=True,
+                    ),
+                )
+            ],
+        )
+
         self.distribution = cloudfront.Distribution(
             self,
             "Distribution",
+            web_acl_id=rate_limit_waf.attr_arn,
             default_root_object="index.html",
             default_behavior=cloudfront.BehaviorOptions(
                 origin=asset_origin,

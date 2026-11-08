@@ -1,0 +1,35 @@
+name: API load smoke test (manual)
+
+# Manual-only: runs scripts/load/api-smoke.js (k6) against a target API URL. Never wired to
+# push/pull_request — this is an on-demand check, not part of regular CI.
+on:
+  workflow_dispatch:
+    inputs:
+      api_url:
+        description: Base URL of the API to hit (e.g. the dev HTTP API URL)
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  k6:
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.3.0
+      - name: Install k6 (single static binary, no package manager needed)
+        run: |
+          set -euo pipefail
+          curl -sL https://github.com/grafana/k6/releases/download/v0.54.0/k6-v0.54.0-linux-amd64.tar.gz \
+            | tar xz --strip-components 1
+          sudo mv k6 /usr/local/bin/k6
+          k6 version
+      - name: Run load smoke test
+        run: k6 run scripts/load/api-smoke.js
+        env:
+          # Falls back to the "dev" GitHub Environment's stored API URL when no input is
+          # given; see deploy.yml's `deploy` job for where that value comes from (ApiUrl
+          # CloudFormation output), stored here as a repo/environment variable for reuse.
+          MF_API_URL: ${{ inputs.api_url || vars.MF_DEV_API_URL }}

@@ -8,12 +8,14 @@ from typing import Any
 
 import pytest
 import stripe
+from fakes import FakeRateLimitRepository
 from fastapi.testclient import TestClient
 from modelforge_db.exceptions import NotFoundError
 from modelforge_db.records import UserRecord
 
 from app.auth import current_user
 from app.main import app
+from app.rate_limit import get_rate_limit_repository
 from app.routers import billing as billing_router
 
 client = TestClient(app)
@@ -67,6 +69,7 @@ def _overrides(monkeypatch: pytest.MonkeyPatch) -> Any:
     app.dependency_overrides[current_user] = lambda: _USER
     app.dependency_overrides[billing_router.get_user_repository] = lambda: user_repo
     app.dependency_overrides[billing_router.get_billing_event_repository] = lambda: event_repo
+    app.dependency_overrides[get_rate_limit_repository] = FakeRateLimitRepository
     monkeypatch.setattr(billing_router, "get_stripe_secret_key", lambda: "sk_test_fake")
     monkeypatch.setattr(billing_router, "get_stripe_webhook_secret", lambda: "whsec_fake")
     yield SimpleNamespace(users=user_repo, events=event_repo)

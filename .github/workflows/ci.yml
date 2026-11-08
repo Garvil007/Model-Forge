@@ -57,3 +57,27 @@ jobs:
         env:
           MF_AWS_ENDPOINT_URL: http://localhost:4566
       - run: npm run test --prefix apps/web
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      # Each package gets its own fresh venv so pip-audit reports vulnerabilities per
+      # package's own dependency set, rather than one merged report across all four.
+      - run: |
+          for pkg in packages/catalog packages/db apps/api workers; do
+            echo "::group::pip-audit: $pkg"
+            python -m venv /tmp/audit-venv
+            /tmp/audit-venv/bin/pip install -q --upgrade pip pip-audit
+            /tmp/audit-venv/bin/pip install -q -e "$pkg"
+            /tmp/audit-venv/bin/pip-audit --progress-spinner=off --local
+            rm -rf /tmp/audit-venv
+            echo "::endgroup::"
+          done
+      - run: npm audit --audit-level=high --prefix apps/web

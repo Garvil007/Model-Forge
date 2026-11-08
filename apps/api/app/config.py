@@ -29,7 +29,11 @@ class Settings(BaseSettings):
     system_jobs_queue_url: str = ""
     cpu_jobs_queue_url: str = ""
     gpu_jobs_queue_url: str = ""
-    presign_expiry_seconds: int = 6 * 3600
+    # Upload part URLs need to stay valid long enough for a slow connection to push a
+    # large model through all its parts, but 6h was needlessly generous for how long a
+    # leaked URL (logged by a proxy, cached by a browser extension, etc.) would stay
+    # exploitable; 2h is still comfortable headroom for a multi-GB upload.
+    presign_expiry_seconds: int = 2 * 3600
     download_presign_expiry_seconds: int = 300
     upload_part_size_bytes: int = 100 * 1024 * 1024
     hf_timeout_seconds: float = 15.0

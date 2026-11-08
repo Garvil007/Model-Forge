@@ -29,6 +29,7 @@ from pydantic.alias_generators import to_camel
 from ..auth import current_user
 from ..config import Settings, get_settings
 from ..errors import ApiError
+from ..rate_limit import rate_limit
 from ..services import JobQueueService, StorageService, serialize_job
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
@@ -91,7 +92,19 @@ def _model_info(record: Any) -> ModelInfo:
     )
 
 
-@router.post("", status_code=201)
+@router.post(
+    "",
+    status_code=201,
+    dependencies=[
+        rate_limit(
+            "jobs.create",
+            user_limit=20,
+            user_window_seconds=60,
+            ip_limit=60,
+            ip_window_seconds=60,
+        )
+    ],
+)
 def create_job(
     body: CreateJobRequest,
     user: Annotated[UserRecord, Depends(current_user)],

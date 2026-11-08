@@ -31,6 +31,7 @@ from ..huggingface import (
     HfUnavailableError,
     HfUnsupportedRepoError,
 )
+from ..rate_limit import rate_limit
 from ..services import JobQueueService, serialize_model
 
 router = APIRouter(prefix="/models", tags=["models"])
@@ -138,7 +139,19 @@ def set_validation_dataset(
     return serialize_model(updated)
 
 
-@router.post("/import-hf", status_code=201)
+@router.post(
+    "/import-hf",
+    status_code=201,
+    dependencies=[
+        rate_limit(
+            "models.import_hf",
+            user_limit=10,
+            user_window_seconds=60,
+            ip_limit=30,
+            ip_window_seconds=60,
+        )
+    ],
+)
 def import_hf(
     body: ImportHfRequest,
     user: Annotated[UserRecord, Depends(current_user)],

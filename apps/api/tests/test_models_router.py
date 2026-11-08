@@ -5,12 +5,14 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from fakes import FakeRateLimitRepository
 from fastapi.testclient import TestClient
 from modelforge_db.exceptions import NotFoundError
 from modelforge_db.records import DatasetRecord, ModelRecord, UserRecord
 
 from app.auth import current_user
 from app.main import app
+from app.rate_limit import get_rate_limit_repository
 from app.routers import models as models_router
 
 client = TestClient(app)
@@ -118,6 +120,7 @@ def fakes() -> Any:
     app.dependency_overrides[current_user] = lambda: _USER
     app.dependency_overrides[models_router.get_model_repository] = lambda: model_repo
     app.dependency_overrides[models_router.get_dataset_repository] = lambda: dataset_repo
+    app.dependency_overrides[get_rate_limit_repository] = FakeRateLimitRepository
 
     yield {"models": model_repo, "datasets": dataset_repo}
     app.dependency_overrides.clear()

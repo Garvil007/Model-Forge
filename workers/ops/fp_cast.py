@@ -52,6 +52,7 @@ from modelforge_db.repositories.job_events import JobEventRepository
 from modelforge_db.repositories.jobs import JobRepository
 from modelforge_db.repositories.models import ModelRepository
 
+from core.datasets.base import safe_extract_zip
 from core.exceptions import JobCanceledError, JobTimeoutError, SpotInterruptedError
 from core.similarity import compare_runs
 
@@ -202,8 +203,11 @@ def _cast_keras(path_in: Path, path_out: Path, label: str) -> dict[str, str]:
         raise UnsupportedFormatError("BF16 casting isn't offered for Keras")
     if zipfile.is_zipfile(path_in):
         with tempfile.TemporaryDirectory() as extract_dir:
-            with zipfile.ZipFile(path_in) as archive:
-                archive.extractall(extract_dir)
+            # `path_in` is a user-uploaded .keras archive — untrusted. Use the zip-slip/
+            # zip-bomb-safe extractor (`core.datasets.base.safe_extract_zip`) rather than
+            # raw `ZipFile.extractall`, consistent with every other archive-reading path in
+            # this package.
+            safe_extract_zip(path_in, extract_dir)
             weights_path = Path(extract_dir) / "model.weights.h5"
             if not weights_path.exists():
                 raise UnsupportedFormatError("no model.weights.h5 in .keras archive")
